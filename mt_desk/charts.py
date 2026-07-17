@@ -25,25 +25,27 @@ def _setup_cjk():
         windir = os.environ.get("WINDIR", "C:/Windows")
         font_dir = os.path.join(windir, "Fonts")
         if os.path.isdir(font_dir):
-            cjk_files = ["msyh.ttc", "msyhbd.ttc", "simsun.ttc", "simhei.ttf"]
-            for fn in cjk_files:
+            for fn in ["msyh.ttc", "msyhbd.ttc", "simsun.ttc", "simhei.ttf"]:
                 fp = os.path.join(font_dir, fn)
                 if os.path.isfile(fp):
-                    fm.fontManager.addfont(fp)
+                    try:
+                        fm.fontManager.addfont(fp)
+                    except Exception:
+                        pass
 
-    # Clear font cache
-    cache_dir = fm.get_cachedir()
-    for f in glob.glob(os.path.join(cache_dir, "fontlist*")):
-        try:
-            os.remove(f)
-        except OSError:
-            pass
-
-    # Force rebuild
+    # Clear font cache (matplotlib >=3.10 removed get_cachedir)
     try:
-        fm._load_fontmanager(try_read_cache=False)
-    except Exception:
-        pass
+        cache_dir = matplotlib.get_cachedir()
+    except AttributeError:
+        cache_dir = os.path.join(matplotlib.get_configdir(), "fontlist-v330.json")
+        if not os.path.exists(cache_dir):
+            cache_dir = None
+    if cache_dir and os.path.isdir(cache_dir):
+        for f in glob.glob(os.path.join(cache_dir, "fontlist*")):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
 
     matplotlib.rcParams["font.family"] = "sans-serif"
     matplotlib.rcParams["font.sans-serif"] = [
