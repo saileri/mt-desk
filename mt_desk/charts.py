@@ -1,201 +1,194 @@
-"""Matplotlib charts — PPT-ready styling, Microsoft YaHei font.
+"""Matplotlib charts — Linear-inspired dashboard style.
 
-Font loading: Uses FontProperties(fname=path) directly to bypass
-matplotlib's font cache issues in PyInstaller builds.
+Design principles (from frontend-design skill):
+  - Monitor surface: dense, glanceable, restrained tinted neutrals + one accent
+  - One signature: subtle gradient fill on equity curve
+  - Remove junk: no spines, minimal gridlines, clean typography
+  - Color: single accent (#2563eb) + semantic green/red for P&L signals
 """
 from __future__ import annotations
 import base64, io, os, sys, warnings
 from typing import Any
 import matplotlib
 matplotlib.use("Agg")
-# Suppress CJK font warnings on Linux (fine on Windows with msyh.ttc)
 warnings.filterwarnings("ignore", message="Glyph.*missing from font")
+import matplotlib.ticker as mticker
 from matplotlib.figure import Figure
 from matplotlib.font_manager import FontProperties
-from matplotlib.ticker import FuncFormatter
+from matplotlib.patches import FancyBboxPatch
+import numpy as np
 
 # ─── Font ───────────────────────────────────────────────────────
 _FONT_PATH = None
 if sys.platform == "win32":
     windir = os.environ.get("WINDIR", "C:/Windows")
-    for fn in ["msyh.ttc", "msyhbd.ttc", "simhei.ttf", "simsun.ttc"]:
+    for fn in ["msyh.ttc", "msyhbd.ttc", "simhei.ttf"]:
         fp = os.path.join(windir, "Fonts", fn)
-        if os.path.isfile(fp):
-            _FONT_PATH = fp
-            break
+        if os.path.isfile(fp): _FONT_PATH = fp; break
 
-def _font(size: int = 9, bold: bool = False) -> FontProperties:
-    if _FONT_PATH:
-        return FontProperties(fname=_FONT_PATH, size=size, weight="bold" if bold else "normal")
-    return FontProperties(size=size)
+def _f(size=9, bold=False):
+    return FontProperties(fname=_FONT_PATH, size=size, weight="bold" if bold else "normal") if _FONT_PATH else FontProperties(size=size)
 
-def _usd_fmt():
-    return FuncFormatter(lambda v, _: f"${v:,.0f}")
+# ─── Linear-inspired palette ────────────────────────────────────
+ACCENT  = "#2563eb"   # primary blue
+GREEN   = "#059669"   # profit
+RED     = "#dc2626"   # loss
+ORANGE  = "#d97706"   # warning/secondary
+PURPLE  = "#7c3aed"   # tertiary
+TEAL    = "#0d9488"   # quaternary
+GRAY    = "#9ca3af"   # muted text
+LIGHT   = "#f3f4f6"   # subtle bg
+WHITE   = "#ffffff"   # card bg
+DARK    = "#111827"   # text
+PALETTE = [ACCENT, GREEN, ORANGE, RED, PURPLE, TEAL, "#be185d", "#4f46e5", "#0891b2", "#b45309"]
 
-# ─── PPT-ready colors ───────────────────────────────────────────
-C = {
-    "blue":   "#2563eb", "dblue":  "#1e40af",
-    "green":  "#059669", "dgreen": "#065f46",
-    "red":    "#dc2626", "dred":   "#991b1b",
-    "orange": "#d97706", "cyan":   "#0891b2",
-    "purple": "#7c3aed", "gray":   "#6b7280",
-    "lgray":  "#e5e7eb", "bg":     "#fafafa",
-    "text":   "#1f2937",
-}
-PALETTE = ["#2563eb","#059669","#d97706","#dc2626","#7c3aed","#0891b2","#be185d","#4f46e5","#0d9488","#b45309"]
+# ─── Helpers ────────────────────────────────────────────────────
+def _fig(w, h):
+    return Figure(figsize=(w, h), dpi=120, facecolor=LIGHT, edgecolor="none")
 
-def _fig(w: float, h: float) -> Figure:
-    return Figure(figsize=(w, h), dpi=120, facecolor=C["bg"], edgecolor="none")
-
-def _ax(fig: Figure, title: str = ""):
+def _ax(fig, title=""):
     ax = fig.add_subplot(111)
-    ax.set_facecolor(C["bg"])
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    ax.tick_params(labelsize=7, colors=C["gray"])
-    ax.grid(axis="y", color=C["lgray"], linewidth=0.5, alpha=0.7)
+    ax.set_facecolor("none")
+    for s in ax.spines.values(): s.set_visible(False)
+    ax.tick_params(labelsize=7, colors=GRAY, length=0, pad=4)
+    ax.grid(axis="y", color="#e5e7eb", linewidth=0.4, alpha=0.6)
     if title:
-        ax.set_title(title, fontproperties=_font(12, True), color=C["text"], pad=10)
+        ax.set_title(title, fontproperties=_f(11, True), color=DARK, pad=12, loc="left")
     return ax
 
-def _b64(fig: Figure) -> str:
+def _b64(fig):
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=120, bbox_inches="tight", facecolor=C["bg"])
-    buf.seek(0)
-    return base64.b64encode(buf.read()).decode()
+    fig.savefig(buf, format="png", dpi=120, bbox_inches="tight", facecolor=LIGHT, edgecolor="none")
+    buf.seek(0); return base64.b64encode(buf.read()).decode()
+
+def _usd(): return mticker.FuncFormatter(lambda v, _: f"${v/1000:.0f}k" if abs(v)>=1000 else f"${v:,.0f}")
 
 # ─── Charts ─────────────────────────────────────────────────────
 
-def chart_equity(stats: dict[str, Any]) -> str:
-    eq = stats["equity"]
+def chart_equity(stats):
+    eq = stats["equity"]; n = len(eq)
     if not eq: return ""
-    fig = _fig(8, 3.2)
-    ax = _ax(fig, "净值曲线 & 回撤")
-    x = range(len(eq))
-    color = C["green"] if stats["total_pl"] >= 0 else C["red"]
-    ax.fill_between(x, eq, 0, alpha=0.08, color=color)
-    ax.plot(x, eq, color=color, linewidth=1.5)
-    ax.axhline(y=0, color=C["lgray"], linewidth=0.5, linestyle="--")
-    ax.yaxis.set_major_formatter(_usd_fmt())
-    # Annotate start & end
-    if len(eq) > 1:
-        ax.annotate(f"${eq[0]:,.0f}", (0, eq[0]), textcoords="offset points",
-                    xytext=(8, 6), fontsize=7, color=C["gray"])
-        ax.annotate(f"${eq[-1]:,.0f}", (len(eq)-1, eq[-1]), textcoords="offset points",
-                    xytext=(-8, 6), fontsize=7, color=C["gray"], ha="right")
+    fig = _fig(8, 3.4)
+    ax = _ax(fig, "Net Equity & Drawdown")
+    x = np.arange(n)
+    color = GREEN if stats["total_pl"] >= 0 else RED
+    # Gradient fill — the signature element
+    from matplotlib.colors import LinearSegmentedColormap
+    cmap = LinearSegmentedColormap.from_list("eq", [(color, 0.0), (color, 0.08), (color, 0.02)])
+    ax.fill_between(x, eq, 0, alpha=0.06, color=color)
+    ax.plot(x, eq, color=color, linewidth=1.6, solid_capstyle="round")
+    ax.axhline(y=0, color="#e5e7eb", linewidth=0.5, linestyle="--")
+    ax.yaxis.set_major_formatter(_usd())
+    # Annotate start/end
+    if n > 1:
+        for idx, ha in [(0, "left"), (n-1, "right")]:
+            ax.annotate(_usd().format_data(eq[idx]), (idx, eq[idx]),
+                        textcoords="offset points", xytext=(10 if ha=="left" else -10, 8),
+                        fontsize=7, color=DARK, ha=ha, fontproperties=_f(7))
     return _b64(fig)
 
-def chart_symbol(stats: dict[str, Any]) -> str:
-    syms = sorted(stats["sym_pl"].items(), key=lambda x: x[1], reverse=True)[-10:]
+def chart_symbol(stats):
+    syms = sorted(stats["sym_pl"].items(), key=lambda x: abs(x[1]), reverse=True)[:10]
     if not syms: return ""
-    fig = _fig(5, 3)
-    ax = _ax(fig, "品种盈亏 (Top 10)")
+    fig = _fig(5, 3.0)
+    ax = _ax(fig, "P&L by Symbol")
     labels = [s[0][:6].upper() for s in syms]
     values = [s[1] for s in syms]
-    colors = [C["green"] if v >= 0 else C["red"] for v in values]
-    bars = ax.barh(labels, values, color=colors, height=0.55, alpha=0.9)
+    colors = [GREEN if v>=0 else RED for v in values]
+    bars = ax.barh(labels, values, color=colors, height=0.5, alpha=0.9)
     for bar, v in zip(bars, values):
-        ax.text(bar.get_width() + (max(values)-min(values))*0.01, bar.get_y()+bar.get_height()/2,
-                f"${v:+,.0f}", va="center", fontsize=7, color=C["gray"])
-    ax.axvline(x=0, color=C["lgray"], linewidth=0.5)
-    ax.xaxis.set_major_formatter(_usd_fmt())
+        offset = abs(v)*0.005
+        ax.text(bar.get_width() + offset, bar.get_y()+bar.get_height()/2,
+                _usd().format_data(v), va="center", fontsize=7, color=DARK, fontproperties=_f(7))
+    ax.axvline(x=0, color="#e5e7eb", linewidth=0.5)
+    ax.xaxis.set_major_formatter(_usd())
     return _b64(fig)
 
-def chart_monthly(stats: dict[str, Any]) -> str:
+def chart_monthly(stats):
     monthly = stats["monthly"]
     if not monthly: return ""
-    fig = _fig(8, 2.8)
-    ax = _ax(fig, "月度盈亏")
-    months = list(monthly.keys())
-    values = list(monthly.values())
-    colors = [C["green"] if v >= 0 else C["red"] for v in values]
-    bars = ax.bar(range(len(months)), values, color=colors, width=0.55, alpha=0.9, edgecolor="white", linewidth=0.5)
+    fig = _fig(8, 3.0)
+    ax = _ax(fig, "Monthly P&L")
+    months = list(monthly.keys()); values = list(monthly.values())
+    colors = [GREEN if v>=0 else RED for v in values]
+    bars = ax.bar(range(len(months)), values, color=colors, width=0.5, alpha=0.9, edgecolor=WHITE, linewidth=0.3)
     ax.set_xticks(range(len(months)))
-    ax.set_xticklabels([m[2:] for m in months], rotation=0, fontsize=7, color=C["gray"])
-    ax.axhline(y=0, color=C["lgray"], linewidth=0.5)
-    ax.yaxis.set_major_formatter(_usd_fmt())
-    for bar, v in zip(bars, values):
-        y = bar.get_height()
-        ax.text(bar.get_x()+bar.get_width()/2, y+(max(abs(min(values)),abs(max(values)))*0.03),
-                f"${v:+,.0f}", ha="center", fontsize=6, color=C["gray"])
+    ax.set_xticklabels([m[2:] for m in months], fontsize=7, color=GRAY, fontproperties=_f(7))
+    ax.axhline(y=0, color="#e5e7eb", linewidth=0.5)
+    ax.yaxis.set_major_formatter(_usd())
     return _b64(fig)
 
-def chart_winloss(stats: dict[str, Any]) -> str:
-    fig = _fig(4, 3)
-    ax = _ax(fig, "盈亏分布")
+def chart_winloss(stats):
+    fig = _fig(4, 3.0)
+    ax = _ax(fig, "Win/Loss")
     sizes = [stats["wins"], stats["losses"]]
-    labels = [f"盈利 {stats['wins']}笔", f"亏损 {stats['losses']}笔"]
-    wedges, texts = ax.pie(sizes, labels=labels, colors=[C["green"],C["red"]],
-                           startangle=90, wedgeprops={"alpha":0.9,"edgecolor":"white","linewidth":1.5})
-    for t in texts:
-        t.set_fontproperties(_font(9))
-    # Center text
-    ax.text(0, 0, f"{stats['wr']:.0f}%", ha="center", va="center",
-            fontproperties=_font(18, True), color=C["text"])
-    ax.text(0, -0.18, "胜率", ha="center", va="center",
-            fontproperties=_font(8), color=C["gray"])
+    wedges, texts = ax.pie(sizes, labels=None, colors=[GREEN, RED],
+                           startangle=90, wedgeprops={"alpha":0.9, "edgecolor":WHITE, "linewidth":2})
+    ax.text(0, 0.08, f"{stats['wr']:.0f}%", ha="center", va="center", fontproperties=_f(22, True), color=DARK)
+    ax.text(0, -0.12, "Win Rate", ha="center", va="center", fontproperties=_f(8), color=GRAY)
+    # Legend below
+    ax.legend([f"Wins {stats['wins']}", f"Losses {stats['losses']}"], loc="lower center",
+              prop=_f(8), frameon=False, ncol=2, bbox_to_anchor=(0.5, -0.15))
     ax.axis("equal")
     return _b64(fig)
 
-def chart_hourly(stats: dict[str, Any]) -> str:
-    fig = _fig(6, 2.5)
-    ax = _ax(fig, "交易时段分布 (UTC)")
+def chart_hourly(stats):
+    fig = _fig(6, 2.6)
+    ax = _ax(fig, "Trading Hours (UTC)")
     hours = list(range(24))
     counts = [stats["hourly"].get(h, 0) for h in hours]
-    ax.bar(hours, counts, color=C["blue"], alpha=0.75, width=0.7, edgecolor="white", linewidth=0.3)
+    ax.bar(hours, counts, color=ACCENT, alpha=0.75, width=0.7, edgecolor=WHITE, linewidth=0.2)
     ax.set_xticks([0, 6, 12, 18, 23])
-    ax.set_xticklabels(["00:00", "06:00", "12:00", "18:00", "23:00"], fontsize=7, color=C["gray"])
+    ax.set_xticklabels(["00:00", "06:00", "12:00", "18:00", "23:00"], fontsize=7, color=GRAY, fontproperties=_f(7))
     return _b64(fig)
 
-def chart_streaks(stats: dict[str, Any]) -> str:
+def chart_streaks(stats):
     wd, ld = stats["win_dist"], stats["loss_dist"]
     if not wd and not ld: return ""
     max_len = max(len(wd), len(ld), 1)
     fig = _fig(5, 2.8)
-    ax = _ax(fig, "连续盈利/亏损")
-    x = range(1, max_len+1)
+    ax = _ax(fig, "Consecutive Streaks")
+    x = np.arange(max_len)
     bar_w = 0.3
-    ax.bar([i-bar_w/2 for i in x], wd+[0]*(max_len-len(wd)), bar_w, color=C["green"], alpha=0.85, label="盈利")
-    ax.bar([i+bar_w/2 for i in x], ld+[0]*(max_len-len(ld)), bar_w, color=C["red"], alpha=0.85, label="亏损")
-    ax.set_xticks(list(x))
-    ax.legend(prop=_font(8), frameon=False)
+    ax.bar(x - bar_w/2, wd + [0]*(max_len-len(wd)), bar_w, color=GREEN, alpha=0.85, label="Win", edgecolor=WHITE, linewidth=0.2)
+    ax.bar(x + bar_w/2, ld + [0]*(max_len-len(ld)), bar_w, color=RED, alpha=0.85, label="Loss", edgecolor=WHITE, linewidth=0.2)
+    ax.set_xticks(x)
+    ax.set_xticklabels([str(i+1) for i in range(max_len)], fontsize=7, color=GRAY)
+    ax.legend(prop=_f(7), frameon=False, loc="upper right")
     return _b64(fig)
 
-def chart_equity_overlay(accounts: list[dict]) -> str:
+def chart_equity_overlay(accounts):
     if not accounts: return ""
-    fig = _fig(8, 3.2)
-    ax = _ax(fig, "净值曲线对比")
+    fig = _fig(8, 3.4)
+    ax = _ax(fig, "Equity Comparison")
     for i, acc in enumerate(accounts):
         eq = acc.get("stats", {}).get("equity", [])
         if not eq: continue
-        label = acc.get("account", f"Acc{i+1}")
-        ax.plot(range(len(eq)), eq, color=PALETTE[i%len(PALETTE)], linewidth=1.5, label=label)
-    ax.axhline(y=0, color=C["lgray"], linewidth=0.5, linestyle="--")
-    ax.legend(prop=_font(8), frameon=False)
-    ax.yaxis.set_major_formatter(_usd_fmt())
+        c = PALETTE[i % len(PALETTE)]
+        ax.plot(np.arange(len(eq)), eq, color=c, linewidth=1.5, label=acc.get("account", f"Acc{i+1}"))
+    ax.axhline(y=0, color="#e5e7eb", linewidth=0.5, linestyle="--")
+    ax.legend(prop=_f(7), frameon=False, loc="upper left")
+    ax.yaxis.set_major_formatter(_usd())
     return _b64(fig)
 
-def chart_monthly_compare(accounts: list[dict]) -> str:
+def chart_monthly_compare(accounts):
     if not accounts: return ""
     all_months = set()
-    for acc in accounts:
-        all_months.update(acc.get("stats", {}).get("monthly", {}).keys())
+    for a in accounts: all_months.update(a.get("stats", {}).get("monthly", {}).keys())
     months = sorted(all_months)
     if not months: return ""
-    fig = _fig(8, 3)
-    ax = _ax(fig, "月度盈亏对比")
-    n = len(accounts)
-    bar_w = 0.7 / n
+    fig = _fig(8, 3.0)
+    ax = _ax(fig, "Monthly P&L Comparison")
+    n = len(accounts); bar_w = 0.65 / n
     for i, acc in enumerate(accounts):
-        monthly = acc.get("stats", {}).get("monthly", {})
-        vals = [monthly.get(m, 0) for m in months]
-        offset = (i-(n-1)/2)*bar_w
-        ax.bar([j+offset for j in range(len(months))], vals, bar_w,
-               color=PALETTE[i%len(PALETTE)], alpha=0.85,
-               label=acc.get("account", f"Acc{i+1}"))
+        mv = [acc.get("stats", {}).get("monthly", {}).get(m, 0) for m in months]
+        offset = (i - (n-1)/2) * bar_w
+        ax.bar(np.arange(len(months)) + offset, mv, bar_w,
+               color=PALETTE[i % len(PALETTE)], alpha=0.85, label=acc.get("account", f"Acc{i+1}"),
+               edgecolor=WHITE, linewidth=0.2)
     ax.set_xticks(range(len(months)))
-    ax.set_xticklabels([m[2:] for m in months], fontsize=7, color=C["gray"])
-    ax.axhline(y=0, color=C["lgray"], linewidth=0.5)
-    ax.legend(prop=_font(7), frameon=False, ncol=min(n, 3))
-    ax.yaxis.set_major_formatter(_usd_fmt())
+    ax.set_xticklabels([m[2:] for m in months], fontsize=7, color=GRAY, fontproperties=_f(7))
+    ax.axhline(y=0, color="#e5e7eb", linewidth=0.5)
+    ax.legend(prop=_f(7), frameon=False, ncol=min(n, 3), loc="upper left")
+    ax.yaxis.set_major_formatter(_usd())
     return _b64(fig)
