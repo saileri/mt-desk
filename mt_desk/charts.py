@@ -1,14 +1,11 @@
-"""ECharts config generator — browser-native rendering, no matplotlib.
+"""ECharts config generator — zero dependencies, pure Python stdlib.
 
-Apache ECharts (66.8k stars) — enterprise-grade interactive charts.
-X-axis uses real dates. Fonts rendered by browser (crisp, native).
+Apache ECharts (66.8k stars) renders charts in browser.
 """
 from __future__ import annotations
-import json
+import json,math
 from collections import defaultdict
-from typing import Any
 from datetime import datetime
-import numpy as np
 
 def _j(obj): return json.dumps(obj, ensure_ascii=False, default=str)
 
@@ -44,7 +41,10 @@ def chart_equity(stats):
 def chart_monthly(stats):
     m = stats["monthly"]; months = list(m.keys()); vals = list(m.values())
     if not m: return "null"
-    cum = list(np.cumsum(vals))
+    # Cumulative sum
+    cum_vals = []; running = 0
+    for v in vals: running += v; cum_vals.append(running)
+    cum = cum_vals
     return _j({
         "tooltip": {"trigger": "axis"},
         "legend": {"data": ["月度盈虧", "累計"], "top": 0, "textStyle": {"fontSize": 11}},
@@ -71,9 +71,17 @@ def chart_pnl_dist(stats, trades):
     pls = [t["profit"] for t in trades]
     if not pls: return "null"
     bins = min(50, max(20, int(len(pls)**0.5)))
-    hist, edges = np.histogram(pls, bins=bins)
-    mean_pl = np.mean(pls)
-    categories = [f"${edges[i]:.0f}" for i in range(len(edges)-1)]
+    # Pure Python histogram
+    pl_min, pl_max = min(pls), max(pls)
+    if pl_min == pl_max: pl_max = pl_min + 1
+    bin_w = (pl_max - pl_min) / bins
+    hist = [0] * bins
+    edges = [pl_min + i * bin_w for i in range(bins + 1)]
+    for v in pls:
+        idx = min(int((v - pl_min) / bin_w), bins - 1)
+        hist[idx] += 1
+    mean_pl = sum(pls) / len(pls)
+    categories = [f"${edges[i]:.0f}" for i in range(bins)]
     return _j({
         "tooltip": {"trigger": "axis"},
         "grid": {"left": 50, "right": 20, "top": 30, "bottom": 40},
