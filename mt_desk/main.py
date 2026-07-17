@@ -17,7 +17,8 @@ def build_dashboard_html(account,trades,stats,date_from=None,date_to=None):
     chart_configs={
         "equity":chart_equity(stats),"symbol":chart_symbol(stats),
         "monthly":chart_monthly(stats),"pnl_dist":chart_pnl_dist(stats,trades),
-        "hourly":chart_hourly(stats),"cumulative":chart_cumulative(stats),
+        "hourly":chart_hourly(stats),"rolling_wr":chart_rolling_wr(stats,trades),
+        "drawdown":chart_drawdown(stats),"volume_dist":chart_volume_dist(stats,trades),
     }
     cards=[
         ("總交易",str(stats["count"]),""),("總盈虧",f"${stats['total_pl']:+,.2f}","--green" if stats["total_pl"]>=0 else"--red"),
@@ -28,9 +29,10 @@ def build_dashboard_html(account,trades,stats,date_from=None,date_to=None):
     ]
     card_html="".join(f'<div class="kpi"><span class="lbl">{l}</span><span class="val" style="color:var({c})">{v}</span></div>' for l,v,c in cards)
     chart_divs=[]
-    for key,w,h in[("equity","100%","380px"),("monthly","100%","360px"),("pnl_dist","100%","320px"),
-                    ("symbol","100%","340px"),("hourly","100%","280px"),("cumulative","100%","340px")]:
-        chart_divs.append(f'<div class="chart-card {"wide" if key in("equity","monthly","cumulative") else ""}"><div id="chart-{key}" style="width:100%;height:{h}"></div></div>')
+    for key,w,h in[("equity","100%","400px"),("drawdown","100%","320px"),("monthly","100%","360px"),
+                    ("pnl_dist","100%","300px"),("symbol","100%","320px"),("rolling_wr","100%","320px"),
+                    ("hourly","100%","260px"),("volume_dist","100%","280px")]:
+        chart_divs.append(f'<div class="chart-card {"wide" if key in("equity","drawdown","monthly") else ""}"><div id="chart-{key}" style="width:100%;height:{h}"></div></div>')
     trade_data=[{"ticket":str(t["ticket"]),"open":t["open_time"].strftime("%Y-%m-%d %H:%M") if t["open_time"] else"-",
         "close":t["close_time"].strftime("%Y-%m-%d %H:%M") if t["close_time"] else"-","type":t["type"].upper(),
         "symbol":t["symbol"].upper(),"volume":t["volume"],"profit":round(t["profit"],2)} for t in trades]
@@ -123,7 +125,7 @@ function toggleTheme(){var c=document.documentElement.getAttribute('data-theme')
 function initCharts(){
   var isDark=document.documentElement.getAttribute('data-theme')==='dark';
   var tc=isDark?'#e2e8f0':'#1f2937';var mc=isDark?'#64748b':'#6b7280';
-  ['equity','monthly','pnl_dist','symbol','hourly','cumulative'].forEach(function(k){
+  ['equity','drawdown','monthly','pnl_dist','symbol','rolling_wr','hourly','volume_dist'].forEach(function(k){
     var el=document.getElementById('chart-'+k);if(!el||!CONFIGS[k]||CONFIGS[k]==='null')return;
     if(el._echart)el._echart.dispose();
     var opt=JSON.parse(CONFIGS[k]);
@@ -137,7 +139,7 @@ function initCharts(){
     chart.setOption(opt);el._echart=chart;
   });
 }
-window.addEventListener('resize',function(){['equity','monthly','pnl_dist','symbol','hourly','cumulative'].forEach(function(k){var el=document.getElementById('chart-'+k);if(el&&el._echart)el._echart.resize();});});
+window.addEventListener('resize',function(){['equity','drawdown','monthly','pnl_dist','symbol','rolling_wr','hourly','volume_dist'].forEach(function(k){var el=document.getElementById('chart-'+k);if(el&&el._echart)el._echart.resize();});});
 initCharts();
 
 var ALL={TRADE_JSON};var data=ALL.slice();var sortCol='profit',sortDir=-1;var currentPage=1,pageSize=15,totalPages=1;var searchIdx=-1,searchMatches=[];
