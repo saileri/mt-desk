@@ -30,10 +30,11 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
     # Equity curve
     sorted_trades = sorted(trades, key=lambda x: x["open_time"] or datetime.min)
     cum = 0.0
-    equity = []
+    equity = []; equity_dates = []
     for t in sorted_trades:
         cum += t["profit"]
-        equity.append(cum)
+        equity.append(round(cum, 2))
+        equity_dates.append(t["open_time"].strftime("%Y-%m-%d") if t["open_time"] else "")
 
     # Max drawdown
     peak = 0.0
@@ -134,6 +135,7 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
         "max_dd": max_dd,
         "sharpe": sharpe,
         "equity": [round(v, 2) for v in equity],
+        "equity_dates": equity_dates,
         "streaks_win": streaks_win,
         "streaks_loss": streaks_loss,
         "win_dist": win_dist,

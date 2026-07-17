@@ -1,43 +1,19 @@
 name: Build Windows EXE
-
 on:
-  push:
-    tags: ['v*']
+  push: { tags: ['v*'] }
   workflow_dispatch:
-
-permissions:
-  contents: write
-
+permissions: { contents: write }
 jobs:
   build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: pip install matplotlib pyinstaller
-
-      - name: Build EXE
-        run: |
-          pyinstaller --onefile --noconsole `
-            --name "MT Desk" `
-            --hidden-import matplotlib.backends.backend_agg `
-            --collect-all matplotlib `
-            mt_desk/main.py
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: mt-desk-exe
-          path: dist/MT Desk.exe
-
-      - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
+        with: { python-version: '3.11' }
+      - run: pip install pyinstaller
+      - run: pyinstaller --onefile --noconsole --name "MT Desk" mt_desk/main.py
+      - uses: actions/upload-artifact@v4
+        with: { name: mt-desk-exe, path: dist/MT Desk.exe }
+      - if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
-        with:
-          files: dist/MT Desk.exe
-          generate_release_notes: true
+        with: { files: dist/MT Desk.exe, generate_release_notes: true }
