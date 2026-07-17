@@ -31,7 +31,7 @@ def build_dashboard_html(account,trades,stats,date_from=None,date_to=None):
     charts_html=""
     for key,cls in[("equity","wide"),("symbol",""),("pnl_dist",""),("monthly","wide"),("hourly",""),("cumulative","wide")]:
         if dk.get(key) and lt.get(key):
-            charts_html+=f'<div class="chart-card {"wide" if cls=="wide" else ""}"><img class="chart-dark" src="data:image/png;base64,{dk[key]}"><img class="chart-light" src="data:image/png;base64,{lt[key]}" style="display:none"></div>'
+            charts_html+=f'<div class="chart-card {"wide" if cls=="wide" else ""}"><img class="chart-dark" src="data:image/png;base64,{dk[key]}"><img class="chart-light" src="data:image/png;base64,{lt[key]}"></div>'
     trade_data=[{"ticket":str(t["ticket"]),"open":t["open_time"].strftime("%Y-%m-%d %H:%M") if t["open_time"] else"-",
         "close":t["close_time"].strftime("%Y-%m-%d %H:%M") if t["close_time"] else"-","type":t["type"].upper(),
         "symbol":t["symbol"].upper(),"volume":t["volume"],"profit":round(t["profit"],2)} for t in trades]
@@ -67,8 +67,8 @@ body{{font-family:'Segoe UI','Microsoft YaHei',system-ui,sans-serif;background:v
 .chart-card.wide{{grid-column:1/-1}}
 .chart-card img{{width:100%;display:block}}
 /* Theme-aware chart visibility */
-[data-theme="dark"] .chart-dark{{display:block}}[data-theme="dark"] .chart-light{{display:none}}
-[data-theme="light"] .chart-dark{{display:none}}[data-theme="light"] .chart-light{{display:block}}
+[data-theme="dark"] .chart-dark{{display:block!important}}[data-theme="dark"] .chart-light{{display:none!important}}
+[data-theme="light"] .chart-dark{{display:none!important}}[data-theme="light"] .chart-light{{display:block!important}}
 .toolbar{{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}}
 .toolbar input{{padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:clamp(10px,0.8vw,13px);outline:none;background:var(--surface);color:var(--text);font-family:inherit;transition:border-color .2s;width:clamp(140px,18vw,200px)}}
 .toolbar input:focus{{border-color:var(--blue)}}.toolbar input::placeholder{{color:var(--muted)}}
