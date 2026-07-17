@@ -29,10 +29,14 @@ def build_dashboard_html(account,trades,stats,date_from=None,date_to=None):
     ]
     card_html="".join(f'<div class="kpi"><span class="lbl">{l}</span><span class="val" style="color:var({c})">{v}</span></div>' for l,v,c in cards)
     chart_divs=[]
+    chart_names={"equity":"淨值曲線 & 回撤","drawdown":"回撤走勢","monthly":"月度盈虧",
+                 "pnl_dist":"盈虧分佈","symbol":"品種盈虧","rolling_wr":"滾動勝率 (30筆)",
+                 "hourly":"交易時段","volume_dist":"手數分佈"}
     for key,w,h in[("equity","100%","400px"),("drawdown","100%","320px"),("monthly","100%","360px"),
                     ("pnl_dist","100%","300px"),("symbol","100%","320px"),("rolling_wr","100%","320px"),
                     ("hourly","100%","260px"),("volume_dist","100%","280px")]:
-        chart_divs.append(f'<div class="chart-card {"wide" if key in("equity","drawdown","monthly") else ""}"><div id="chart-{key}" style="width:100%;height:{h}"></div></div>')
+        label = chart_names.get(key, key)
+        chart_divs.append(f'<div class="chart-card {"wide" if key in("equity","drawdown","monthly") else ""}"><div id="chart-{key}" style="width:100%;height:{h}"></div><div class="chart-label">{label}</div></div>')
     trade_data=[{"ticket":str(t["ticket"]),"open":t["open_time"].strftime("%Y-%m-%d %H:%M") if t["open_time"] else"-",
         "close":t["close_time"].strftime("%Y-%m-%d %H:%M") if t["close_time"] else"-","type":t["type"].upper(),
         "symbol":t["symbol"].upper(),"volume":t["volume"],"profit":round(t["profit"],2)} for t in trades]
@@ -72,6 +76,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 .charts{display:grid;grid-template-columns:1fr 1fr;gap:clamp(6px,0.6vw,10px)}
 .chart-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:8px}
 .chart-card.wide{grid-column:1/-1}
+.chart-label{text-align:center;font-size:clamp(10px,0.8vw,12px);color:var(--muted);padding:4px 0 2px;font-weight:500}
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
 .toolbar input{padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:clamp(10px,0.8vw,13px);outline:none;background:var(--surface);color:var(--text);font-family:inherit;transition:border-color .2s;width:clamp(140px,18vw,200px)}
 .toolbar input:focus{border-color:var(--blue)}.toolbar input::placeholder{color:var(--muted)}
