@@ -192,8 +192,6 @@ def main():
     btn=tk.Button(root,text="📂 選擇 MT4/MT5 HTML 報表",font=("Segoe UI",12),bg="#2563eb",fg="white",
         relief="flat",padx=24,pady=10,command=open_file,cursor="hand2")
     btn.pack(pady=(0,8))
-    tk.Label(root,text="支援 MT4 Statement / MT5 交易歷史報告",font=("Segoe UI",9),fg="#6b7280",bg="#f0f2f5").pack()
-    tk.Label(root,text="瀏覽器只顯示不計算 · 零上傳限制 · 繁體中文",font=("Segoe UI",9),fg="#6b7280",bg="#f0f2f5").pack()
     root.mainloop()
 
 if __name__=="__main__":main()
