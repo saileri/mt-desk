@@ -19,14 +19,12 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install nicegui matplotlib pyinstaller
+        run: pip install matplotlib pyinstaller
 
       - name: Build EXE
         run: |
           pyinstaller --onefile --noconsole `
             --name "MT Desk" `
-            --add-data "mt_desk/index.html;mt_desk" `
             --hidden-import matplotlib.backends.backend_agg `
             --collect-all matplotlib `
             mt_desk/main.py

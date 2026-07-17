@@ -8,7 +8,6 @@ license = { text = "MIT" }
 authors = [{ name = "saileri" }]
 
 dependencies = [
-    "flask>=3.0",
     "matplotlib>=3.9",
     "pyinstaller>=6.0",
 ]
