@@ -16,9 +16,8 @@ THRESHOLD=50*1024*1024
 def build_dashboard_html(account,trades,stats,date_from=None,date_to=None):
     charts={
         "equity":chart_equity(stats),"symbol":chart_symbol(stats),
-        "monthly":chart_monthly(stats),"winloss":chart_winloss(stats),
-        "hourly":chart_hourly(stats),"streaks":chart_streaks(stats),
-        "heatmap":chart_heatmap(stats,trades),"duration":chart_duration(stats,trades),
+        "monthly":chart_monthly(stats),"pnl_dist":chart_pnl_dist(stats,trades),
+        "hourly":chart_hourly(stats),"cumulative":chart_cumulative(stats),
     }
     cards=[
         ("總交易",str(stats["count"])),
@@ -35,8 +34,8 @@ def build_dashboard_html(account,trades,stats,date_from=None,date_to=None):
     card_html="".join(f'<div class="kpi"><div class="lbl">{l}</div><div class="val" style="color:{c}">{v}</div></div>'
         for l,v,c in[(it[0],it[1],it[2] if len(it)>2 else"#1f2937") for it in cards])
     chart_blocks=[]
-    for key,cls in [("equity","wide"),("symbol",""),("winloss",""),("monthly","wide"),
-                     ("streaks",""),("hourly",""),("heatmap","wide"),("duration","")]:
+    for key,cls in [("equity","wide"),("symbol",""),("pnl_dist",""),("monthly","wide"),
+                     ("hourly",""),("cumulative","wide")]:
         if charts.get(key):
             chart_blocks.append(f'<div class="chart-card {"wide" if cls=="wide" else ""}">'
                 f'<img src="data:image/png;base64,{charts[key]}"></div>')
@@ -192,8 +191,6 @@ def main():
     btn=tk.Button(root,text="📂 選擇 MT4/MT5 HTML 報表",font=("Segoe UI",12),bg="#2563eb",fg="white",
         relief="flat",padx=24,pady=10,command=open_file,cursor="hand2")
     btn.pack(pady=(0,8))
-    tk.Label(root,text="支援 MT4 Statement / MT5 交易歷史報告",font=("Segoe UI",9),fg="#6b7280",bg="#f0f2f5").pack()
-    tk.Label(root,text="瀏覽器只顯示不計算 · 零上傳限制 · 繁體中文",font=("Segoe UI",9),fg="#6b7280",bg="#f0f2f5").pack()
     root.mainloop()
 
 if __name__=="__main__":main()
