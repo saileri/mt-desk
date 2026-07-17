@@ -1,0 +1,32 @@
+[project]
+name = "mt-desk"
+version = "1.0.0"
+description = "MT4/MT5 Trading Analytics Desktop — Multi-account comparison dashboard"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "saileri" }]
+
+dependencies = [
+    "nicegui>=2.0",
+    "matplotlib>=3.9",
+    "pyinstaller>=6.0",
+]
+
+[project.scripts]
+mt-desk = "mt_desk.main:main"
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.pyinstaller]
+name = "MT Desk"
+onefile = true
+noconsole = true
+icon = "assets/icon.ico"
+add_data = []
+hidden_imports = [
+    "matplotlib.backends.backend_agg",
+    "nicegui",
+]
