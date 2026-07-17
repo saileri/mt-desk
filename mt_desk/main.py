@@ -154,9 +154,8 @@ def main():
     status_var=tk.StringVar(value="選擇 HTML 報表檔案")
     status=tk.Label(root,textvariable=status_var,font=("Segoe UI",9),fg="#6b7280",bg="#f0f2f5");status.pack(pady=(0,12))
     def open_file():
-        path=filedialog.askopenfilename(title="選擇 MT4/MT5 報表",filetypes=[("HTML","*.htm *.html")])
-        if not path:return
-        fname=Path(path).name;size_mb=Path(path).stat().st_size/1024/1024
+        paths=filedialog.askopenfilenames(title="選擇 MT4/MT5 報表",filetypes=[("HTML","*.htm *.html")])
+        if not paths:return
         df=dt=None
         try:
             s=dfrom_var.get().strip()
@@ -164,9 +163,13 @@ def main():
             s=dto_var.get().strip()
             if s:dt=datetime.strptime(s,"%Y-%m-%d").date()
         except:pass
-        status_var.set(f"⏳ 解析中: {fname} ({size_mb:.1f}MB)...");root.update()
-        try:res,count=process_file(path,df,dt);status_var.set(f"✅ {res['account']} — {count} 筆")
-        except Exception as e:status_var.set(f"❌ {e}");messagebox.showerror("錯誤",str(e))
+        total=len(paths)
+        for i,path in enumerate(paths,1):
+            fname=Path(path).name;size_mb=Path(path).stat().st_size/1024/1024
+            status_var.set(f"⏳ 解析中 ({i}/{total}): {fname} ({size_mb:.1f}MB)...");root.update()
+            try:res,count=process_file(path,df,dt)
+            except Exception as e:status_var.set(f"❌ {e}");messagebox.showerror("錯誤",str(e))
+        status_var.set(f"✅ 完成 — {total} 個檔案")
     tk.Button(root,text="📂 選擇 MT4/MT5 HTML 報表",font=("Segoe UI",12),bg="#2563eb",fg="white",
         relief="flat",padx=24,pady=10,command=open_file,cursor="hand2").pack(pady=(0,8))
     root.mainloop()
