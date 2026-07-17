@@ -15,7 +15,7 @@ import webbrowser
 from pathlib import Path
 from typing import Any
 
-from nicegui import ui, run
+from nicegui import ui
 
 from .parser import parse_statement
 from .analysis import analyze
@@ -295,16 +295,16 @@ def index():
             compare_content = ui.html("").classes("w-full")
 
 
-async def _handle_upload(e, display, status_label):
-    """Handle file upload for single account analysis."""
+def _handle_upload(e, display, status_label):
+    """Handle file upload — synchronous, no async needed for 34KB files."""
     status_label.set_text("⏳ 解析中...")
 
-    # NiceGUI upload: read content directly (supports bytes or stream)
+    # Read upload content
     data = e.content.read() if hasattr(e.content, 'read') else e.content
     if isinstance(data, str):
         data = data.encode("utf-8")
 
-    # Detect encoding from BOM and decode to string
+    # Detect encoding
     if data[:2] == b"\xff\xfe":
         text = data.decode("utf-16-le", errors="replace")
     elif data[:2] == b"\xfe\xff":
@@ -313,7 +313,7 @@ async def _handle_upload(e, display, status_label):
         text = data.decode("utf-8", errors="replace")
 
     try:
-        result = await run.io_bound(_load_from_text, text, getattr(e, 'name', 'upload.htm'))
+        result = _load_from_text(text, getattr(e, 'name', 'upload.htm'))
         if result is None or result["stats"] is None:
             display.set_content("<p style='padding:40px;text-align:center;color:#ef4444'>未找到交易记录</p>")
             status_label.set_text("❌ 未找到交易")
@@ -337,6 +337,15 @@ async def _handle_upload(e, display, status_label):
         status_label.set_text(f"❌ 错误: {exc}")
 
 
+def _handle_compare_upload(e, display, status_label):
+    """Handle file upload for comparison — same as single but also refresh compare view."""
+    _handle_upload(e, display, status_label)
+    if len(_accounts) >= 2:
+        html = build_compare_view(_accounts)
+        display.set_content(html)
+    status_label.set_text(f"已加载 {len(_accounts)} 个账户")
+
+
 def _load_from_text(text: str, filename: str) -> dict[str, Any] | None:
     """Parse statement directly from text string (no file I/O)."""
     from .parser import _detect_and_parse
@@ -353,16 +362,6 @@ def _load_from_text(text: str, filename: str) -> dict[str, Any] | None:
         "stats": stats,
         "type": result["type"],
     }
-
-
-async def _handle_compare_upload(e, display, status_label):
-    """Handle file upload for comparison."""
-    await _handle_upload(e, display, status_label)
-    global _accounts
-    if len(_accounts) >= 2:
-        html = build_compare_view(_accounts)
-        display.set_content(html)
-    status_label.set_text(f"已加载 {len(_accounts)} 个账户")
 
 
 def _clear_accounts(display, status_label):
