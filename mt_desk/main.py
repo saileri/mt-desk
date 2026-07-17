@@ -16,7 +16,7 @@ from mt_desk.charts import *
 if sys.stdout is None: sys.stdout = io.StringIO()
 if sys.stderr is None: sys.stderr = sys.stdout
 
-THRESHOLD = 5 * 1024 * 1024
+THRESHOLD = 50 * 1024 * 1024  # 50MB — above this, slim mode only
 
 def build_slim_html(account: str, trades: list) -> str:
     rows = []
@@ -245,7 +245,7 @@ def main():
     btn = tk.Button(root, text="📂 选择 MT4/MT5 HTML 报表", font=("Segoe UI", 12), bg="#2563eb", fg="white",
                     relief="flat", padx=24, pady=10, command=open_file, cursor="hand2")
     btn.pack(pady=(0,6))
-    tk.Label(root, text="小文件→完整图表  ·  大文件(>5MB)→精简表格", font=("Segoe UI", 9), fg="#6b7280", bg="#f8fafc").pack()
+    tk.Label(root, text="小文件→完整图表  ·  超大文件(>50MB)→精简表格", font=("Segoe UI", 9), fg="#6b7280", bg="#f8fafc").pack()
     tk.Label(root, text="浏览器只显示不计算 · 零上传限制", font=("Segoe UI", 9), fg="#6b7280", bg="#f8fafc").pack()
     root.mainloop()
 
