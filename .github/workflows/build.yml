@@ -26,17 +26,8 @@ jobs:
         run: |
           pyinstaller --onefile --noconsole `
             --name "MT Desk" `
+            --add-data "mt_desk/index.html;mt_desk" `
             --hidden-import matplotlib.backends.backend_agg `
-            --hidden-import matplotlib.backend_managers `
-            --hidden-import matplotlib.backends.backend_svg `
-            --hidden-import nicegui `
-            --hidden-import nicegui.storage `
-            --hidden-import starlette `
-            --hidden-import uvicorn `
-            --hidden-import fastapi `
-            --hidden-import aiohttp `
-            --hidden-import python_socketio `
-            --collect-all nicegui `
             --collect-all matplotlib `
             mt_desk/main.py
 
