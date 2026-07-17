@@ -8,6 +8,8 @@ Architecture:
 from __future__ import annotations
 
 import base64
+import io
+import sys
 import threading
 import webbrowser
 from pathlib import Path
@@ -355,6 +357,17 @@ def _open_browser():
 
 def main():
     """Entry point for the desktop app."""
+    # Fix PyInstaller --noconsole: stdout/stderr are None, uvicorn crashes
+    if sys.stdout is None:
+        sys.stdout = io.StringIO()
+    if sys.stderr is None:
+        sys.stderr = sys.stdout
+
+    # Disable uvicorn access logs to avoid isatty issues
+    import logging
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    logging.getLogger("uvicorn.error").setLevel(logging.WARNING)
+
     # Start browser after a short delay (server needs to be ready)
     threading.Timer(0.8, _open_browser).start()
 
@@ -364,6 +377,7 @@ def main():
         port=PORT,
         reload=False,
         show=False,
+        uvicorn_logging_level="warning",
     )
 
 
