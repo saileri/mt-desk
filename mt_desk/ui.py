@@ -297,22 +297,28 @@ def index():
 
 async def _handle_upload(e, display, status_label):
     """Handle file upload for single account analysis."""
-    import tempfile
     status_label.set_text("⏳ 解析中...")
 
-    # Save uploaded content to temp file
-    with tempfile.NamedTemporaryFile(suffix=".htm", delete=False) as tmp:
-        tmp.write(e.content.read())
-        tmp_path = tmp.name
+    # NiceGUI upload: read content directly (supports bytes or stream)
+    data = e.content.read() if hasattr(e.content, 'read') else e.content
+    if isinstance(data, str):
+        data = data.encode("utf-8")
+
+    # Detect encoding from BOM and decode to string
+    if data[:2] == b"\xff\xfe":
+        text = data.decode("utf-16-le", errors="replace")
+    elif data[:2] == b"\xfe\xff":
+        text = data.decode("utf-16-be", errors="replace")
+    else:
+        text = data.decode("utf-8", errors="replace")
 
     try:
-        result = await run.io_bound(_load_file, tmp_path)
+        result = await run.io_bound(_load_from_text, text, getattr(e, 'name', 'upload.htm'))
         if result is None or result["stats"] is None:
             display.set_content("<p style='padding:40px;text-align:center;color:#ef4444'>未找到交易记录</p>")
             status_label.set_text("❌ 未找到交易")
             return
 
-        # Add to accounts list (replace if same account)
         global _accounts
         _accounts = [a for a in _accounts if a["account"] != result["account"]]
         _accounts.append(result)
@@ -325,11 +331,28 @@ async def _handle_upload(e, display, status_label):
             f"胜率: {result['stats']['wr']:.0f}%"
         )
     except Exception as exc:
-        display.set_content(f"<p style='color:#ef4444'>解析错误: {exc}</p>")
+        import traceback
+        tb = traceback.format_exc()
+        display.set_content(f"<pre style='color:#ef4444;font-size:11px'>{tb}</pre>")
         status_label.set_text(f"❌ 错误: {exc}")
-    finally:
-        import os
-        os.unlink(tmp_path)
+
+
+def _load_from_text(text: str, filename: str) -> dict[str, Any] | None:
+    """Parse statement directly from text string (no file I/O)."""
+    from .parser import _detect_and_parse
+    from .analysis import analyze
+    result = _detect_and_parse(text, filename)
+    trades = result["trades"]
+    if not trades:
+        return None
+    stats = analyze(trades)
+    return {
+        "account": result["account"],
+        "file": filename,
+        "trades": trades,
+        "stats": stats,
+        "type": result["type"],
+    }
 
 
 async def _handle_compare_upload(e, display, status_label):

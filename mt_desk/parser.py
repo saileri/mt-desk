@@ -91,11 +91,14 @@ def parse_statement(filepath: str | Path) -> dict:
     filepath = Path(filepath)
     enc = detect_encoding(filepath)
 
-    # Read entire file (Python string operations are fast enough
-    # for the parsing pass; the main memory optimization is avoiding
-    # regex on the full text — we use indexOf + split instead)
     with open(filepath, "r", encoding=enc, errors="replace") as f:
         html = f.read()
+
+    return _detect_and_parse(html, filepath.stem)
+
+
+def _detect_and_parse(html: str, name: str = "unknown") -> dict:
+    """Parse HTML text directly (no file I/O)."""
 
     # Detect format
     is_mt5 = any(kw in html for kw in [
@@ -107,7 +110,7 @@ def parse_statement(filepath: str | Path) -> dict:
         m = re.search(r"(\d{5,})\s*[:：]", html)
     else:
         m = re.search(r"Account:\s*(\d+)", html, re.IGNORECASE)
-    account = m.group(1) if m else filepath.stem
+    account = m.group(1) if m else name
 
     if is_mt5:
         trades = _parse_mt5(html)
