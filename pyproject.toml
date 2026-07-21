@@ -7,7 +7,10 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "saileri" }]
 
-dependencies = [
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
     "pyinstaller>=6.0",
 ]
 
@@ -25,6 +28,10 @@ noconsole = true
 icon = "assets/icon.ico"
 add_data = []
 hidden_imports = [
-    "matplotlib.backends.backend_agg",
-    "nicegui",
+    "tkinter",
+    "tkinter.filedialog",
+    "tkinter.messagebox",
+    "mt_desk",
+    "mt_desk.parser",
+    "mt_desk.analysis",
 ]
