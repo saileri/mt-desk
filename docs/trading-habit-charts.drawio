@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="drawio" version="26.0.0">
+  <diagram name="交易習慣與偏好分析 — 推薦圖表">
+    <mxGraphModel dx="1400" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ── Center Node ── -->
+        <mxCell id="center" value="交易習慣與&#xa;偏好分析" style="ellipse;whiteSpace=wrap;html=1;fillColor=#1a1a2e;strokeColor=#e94560;strokeWidth=3;fontColor=#ffffff;fontSize=18;fontStyle=1;shadow=1;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="570" y="380" width="180" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- ── Category 1: 交易頻率與時間 (Top-Left) ── -->
+        <mxCell id="cat1" value="📊 交易頻率與時間" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0f3460;strokeColor=#16213e;strokeWidth=2;fontColor=#e2e8f0;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="100" y="60" width="380" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="c1a" value="24 小時交易熱力圖&#xa;(Trading Heatmap)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#16213e;strokeColor=#0f3460;fontColor=#a8b8d8;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat1">
+          <mxGeometry x="15" y="45" width="350" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="c1b" value="週間 vs 週末交易頻率&#xa;(Weekday/Weekend Bar)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#16213e;strokeColor=#0f3460;fontColor=#a8b8d8;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat1">
+          <mxGeometry x="15" y="95" width="350" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="c1c" value="持倉時間分佈直方圖&#xa;(Holding Duration Histogram)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#16213e;strokeColor=#0f3460;fontColor=#a8b8d8;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat1">
+          <mxGeometry x="15" y="145" width="350" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="c1d" value="各月份交易活躍度對比&#xa;(Monthly Activity Bar)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#16213e;strokeColor=#0f3460;fontColor=#a8b8d8;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat1">
+          <mxGeometry x="15" y="195" width="350" height="38" as="geometry" />
+        </mxCell>
+
+        <!-- ── Category 2: 品種偏好 (Top-Right) ── -->
+        <mxCell id="cat2" value="🥧 品種偏好" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1b4332;strokeColor=#2d6a4f;strokeWidth=2;fontColor=#d8f3dc;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="840" y="60" width="380" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="c2a" value="品種交易次數佔比環形圖&#xa;(Symbol Trade Count Donut)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2d6a4f;strokeColor=#1b4332;fontColor=#b7e4c7;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat2">
+          <mxGeometry x="15" y="45" width="350" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="c2b" value="品種盈虧貢獻長條圖&#xa;(Symbol P&amp;L Bar Chart)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2d6a4f;strokeColor=#1b4332;fontColor=#b7e4c7;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat2">
+          <mxGeometry x="15" y="95" width="350" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="c2c" value="品種 × 時段矩陣熱力圖&#xa;(Symbol×Session Heatmap)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2d6a4f;strokeColor=#1b4332;fontColor=#b7e4c7;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat2">
+          <mxGeometry x="15" y="145" width="350" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="c2d" value="交易量 × 品種堆疊圖&#xa;(Volume Stacked by Symbol)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2d6a4f;strokeColor=#1b4332;fontColor=#b7e4c7;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat2">
+          <mxGeometry x="15" y="195" width="350" height="38" as="geometry" />
+        </mxCell>
+
+        <!-- ── Category 3: 風險行為 (Left) ── -->
+        <mxCell id="cat3" value="⚠️ 風險行為" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#4a0e0e;strokeColor=#7f1d1d;strokeWidth=2;fontColor=#fecaca;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="100" y="380" width="340" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="c3a" value="倉位大小分佈盒鬚圖&#xa;(Position Size Box Plot)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7f1d1d;strokeColor=#4a0e0e;fontColor=#fca5a5;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat3">
+          <mxGeometry x="15" y="45" width="310" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="c3b" value="止損距離 vs 盈利散點圖&#xa;(SL Distance vs Profit Scatter)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7f1d1d;strokeColor=#4a0e0e;fontColor=#fca5a5;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat3">
+          <mxGeometry x="15" y="95" width="310" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="c3c" value="槓桿使用率歷史走勢&#xa;(Leverage Ratio Trend Line)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7f1d1d;strokeColor=#4a0e0e;fontColor=#fca5a5;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat3">
+          <mxGeometry x="15" y="145" width="310" height="38" as="geometry" />
+        </mxCell>
+
+        <!-- ── Category 4: 交易風格 (Right) ── -->
+        <mxCell id="cat4" value="🎯 交易風格分類" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3c096c;strokeColor=#5a189a;strokeWidth=2;fontColor=#e0aaff;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="880" y="380" width="340" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="c4a" value="持倉時長 vs 盈虧象限圖&#xa;(Duration vs P&amp;L Quadrant)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#5a189a;strokeColor=#3c096c;fontColor=#c77dff;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat4">
+          <mxGeometry x="15" y="45" width="310" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="c4b" value="多空比例與偏好時段&#xa;(Long/Short × Session)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#5a189a;strokeColor=#3c096c;fontColor=#c77dff;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat4">
+          <mxGeometry x="15" y="95" width="310" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="c4c" value="加倉/減倉行為模式&#xa;(Scaling In/Out Pattern)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#5a189a;strokeColor=#3c096c;fontColor=#c77dff;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat4">
+          <mxGeometry x="15" y="145" width="310" height="38" as="geometry" />
+        </mxCell>
+
+        <!-- ── Category 5: 情境表現 (Bottom-Left) ── -->
+        <mxCell id="cat5" value="🌍 情境表現" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1e3a5f;strokeColor=#2563eb;strokeWidth=2;fontColor=#bfdbfe;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="100" y="660" width="340" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="c5a" value="三大時段表現雷達圖&#xa;(Asia/London/NY Radar)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2563eb;strokeColor=#1e3a5f;fontColor=#93c5fd;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat5">
+          <mxGeometry x="15" y="45" width="310" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="c5b" value="逐月盈虧瀑布圖&#xa;(Monthly P&amp;L Waterfall)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2563eb;strokeColor=#1e3a5f;fontColor=#93c5fd;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat5">
+          <mxGeometry x="15" y="95" width="310" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="c5c" value="波動率 vs 交易活躍度&#xa;(VIX vs Trade Count Overlay)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2563eb;strokeColor=#1e3a5f;fontColor=#93c5fd;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat5">
+          <mxGeometry x="15" y="145" width="310" height="38" as="geometry" />
+        </mxCell>
+
+        <!-- ── Category 6: 行為模式 (Bottom-Right) ── -->
+        <mxCell id="cat6" value="🧠 行為模式" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#064e3b;strokeColor=#059669;strokeWidth=2;fontColor=#a7f3d0;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=8;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="880" y="660" width="340" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="c6a" value="虧損後倉位變化追蹤&#xa;(Post-Loss Size Change)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#059669;strokeColor=#064e3b;fontColor=#6ee7b7;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat6">
+          <mxGeometry x="15" y="45" width="310" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="c6b" value="連續虧損後恢復曲線&#xa;(Recovery After Drawdown)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#059669;strokeColor=#064e3b;fontColor=#6ee7b7;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat6">
+          <mxGeometry x="15" y="95" width="310" height="38" as="geometry" />
+        </mxCell>
+        <mxCell id="c6c" value="交易頻率 vs 市場事件標註&#xa;(Trade Count with Event Flags)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#059669;strokeColor=#064e3b;fontColor=#6ee7b7;fontSize=11;align=left;spacingLeft=12;" vertex="1" parent="cat6">
+          <mxGeometry x="15" y="145" width="310" height="38" as="geometry" />
+        </mxCell>
+
+        <!-- ── Edges: Center → Categories ── -->
+        <mxCell id="e1" value="" style="endArrow=block;html=1;strokeColor=#e94560;strokeWidth=2;exitX=0.5;exitY=0;entryX=0.5;entryY=1;edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="center" target="cat1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="" style="endArrow=block;html=1;strokeColor=#e94560;strokeWidth=2;exitX=0.5;exitY=0;entryX=0.5;entryY=1;edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="center" target="cat2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="" style="endArrow=block;html=1;strokeColor=#e94560;strokeWidth=2;exitX=0;exitY=0.5;entryX=1;entryY=0.5;edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="center" target="cat3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="" style="endArrow=block;html=1;strokeColor=#e94560;strokeWidth=2;exitX=1;exitY=0.5;entryX=0;entryY=0.5;edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="center" target="cat4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="" style="endArrow=block;html=1;strokeColor=#e94560;strokeWidth=2;exitX=0;exitY=1;entryX=1;entryY=0;edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="center" target="cat5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="" style="endArrow=block;html=1;strokeColor=#e94560;strokeWidth=2;exitX=1;exitY=1;entryX=0;entryY=0;edgeStyle=orthogonalEdgeStyle;rounded=1;" edge="1" parent="1" source="center" target="cat6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ── Legend at bottom ── -->
+        <mxCell id="legend" value="已實作 ✅  |  建議新增 💡  |  分析維度 📊" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=9;fontColor=#64748b;" vertex="1" parent="1">
+          <mxGeometry x="500" y="930" width="320" height="20" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
