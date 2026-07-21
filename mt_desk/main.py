@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""MT Desk v6.1 — Long-term trading habit analysis (6 charts)."""
+"""MT Desk v6.2.2 — Long-term trading habit analysis with CSV import + R-Multiple."""
 import json,io,os,sys,tempfile,tkinter as tk,threading,webbrowser
 from tkinter import filedialog,messagebox
 from datetime import datetime
 from pathlib import Path
 from mt_desk.parser import parse_statement
 from mt_desk.analysis import analyze
+from mt_desk.csv_import import import_csv
 
 if sys.stdout is None:sys.stdout=io.StringIO()
 if sys.stderr is None:sys.stderr=sys.stdout
@@ -30,7 +31,8 @@ def build_dashboard_html(account,trades,stats):
         ("最佳",f"+${stats['best']:,.2f}","單筆最大盈利","--green"),
         ("最差",f"-${abs(stats['worst']):,.2f}","單筆最大虧損","--red"),
     ]
-    card_html="".join(f'<div class="kpi has-tip"><span class="lbl">{l}</span><span class="val" style="color:var({c})">{v}</span><span class="tip">{tip}</span></div>' for l,v,tip,c in cards)
+    r_kpi_html=""
+    card_html="".join(f'<div class="kpi has-tip"><span class="lbl">{l}</span><span class="val" style="color:var({c})">{v}</span><span class="tip">{tip}</span></div>' for l,v,tip,c in cards)+r_kpi_html
     # ── Summary top section ──
     sym_pie_data=[{"name":s.upper(),"value":c} for s,c in stats["sym_count"].items()]
     sym_pie_json=json.dumps(sym_pie_data,ensure_ascii=False)
@@ -82,6 +84,40 @@ def build_dashboard_html(account,trades,stats):
     ses_wr=[round(ses[k]["wins"]/ses[k]["cnt"]*100,0) if ses[k]["cnt"]>0 else 0 for k in ses_labels]
     session_json=_j({"labels":ses_labels,"cnt":ses_cnt,"wr":ses_wr})
 
+    # ── v6.2: CSV-only charts (R-Multiple, Asset Class, CSV Session) ──
+    r_multiples=stats.get("r_multiples",[])
+    r_chart_json="null"
+    r_kpi_html=""
+    if r_multiples:
+        r_min=min(r_multiples);r_max=max(r_multiples)
+        r_buckets={"<-3R":0,"-3~-2R":0,"-2~-1R":0,"-1~0R":0,"0~1R":0,"1~2R":0,"2~3R":0,"3~5R":0,"5+R":0}
+        for rv in r_multiples:
+            if rv<-3: r_buckets["<-3R"]+=1
+            elif rv<-2: r_buckets["-3~-2R"]+=1
+            elif rv<-1: r_buckets["-2~-1R"]+=1
+            elif rv<0: r_buckets["-1~0R"]+=1
+            elif rv<1: r_buckets["0~1R"]+=1
+            elif rv<2: r_buckets["1~2R"]+=1
+            elif rv<3: r_buckets["2~3R"]+=1
+            elif rv<5: r_buckets["3~5R"]+=1
+            else: r_buckets["5+R"]+=1
+        rlb=list(r_buckets.keys());rva=list(r_buckets.values())
+        r_chart_json=_j({"labels":rlb,"data":rva,"avg":stats.get("avg_r",0)})
+        r_kpi_html=f'<div class="kpi has-tip"><span class="lbl">平均 R-Multiple</span><span class="val" style="color:var(--{"green" if stats["avg_r"]>=0 else "red"})">{stats["avg_r"]:+.2f}R</span><span class="tip">價位移動距離 ÷ 初始止損距離。>0 表示盈利，<0 表示虧損</span></div>'
+
+    asset_class_data=stats.get("asset_class_count",{})
+    ac_json="null"
+    if asset_class_data:
+        ac_json=json.dumps([{"name":k,"value":v} for k,v in sorted(asset_class_data.items(),key=lambda x:x[1],reverse=True)],ensure_ascii=False)
+
+    session_csv_data=stats.get("session_csv",{})
+    sc_json="null"
+    if session_csv_data:
+        sc_labels=list(session_csv_data.keys())
+        sc_cnt=[session_csv_data[k]["cnt"] for k in sc_labels]
+        sc_wr=[round(session_csv_data[k]["wins"]/session_csv_data[k]["cnt"]*100,0) if session_csv_data[k]["cnt"]>0 else 0 for k in sc_labels]
+        sc_json=_j({"labels":sc_labels,"cnt":sc_cnt,"wr":sc_wr})
+
     # All trades as JSON
     all_trades=[{
         "ticket":str(t["ticket"]),"open":t["open_time"].strftime("%Y-%m-%d %H:%M") if t["open_time"] else"-",
@@ -109,6 +145,10 @@ def build_dashboard_html(account,trades,stats):
     html=html.replace("{EQUITY_JSON}",equity_json)
     html=html.replace("{DURATION_JSON}",duration_json)
     html=html.replace("{SESSION_JSON}",session_json)
+    # v6.2 CSV chart JSON
+    html=html.replace("{R_CHART_JSON}",r_chart_json)
+    html=html.replace("{AC_JSON}",ac_json)
+    html=html.replace("{SC_JSON}",sc_json)
     return html
 
 _HTML=r"""<!DOCTYPE html><html lang="zh-HK"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -166,7 +206,7 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 @media(max-width:768px){.summary-row{grid-template-columns:1fr 1fr}.chart-grid{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(3,1fr)}}
 @media print{@page{margin:12mm}.header,.date-bar,.toolbar,.theme-btn,.metric-guide{display:none!important}.chart-box{break-inside:avoid;page-break-inside:avoid}.table-wrap{overflow-x:visible}body{font-size:10pt;background:#fff!important;color:#000!important}.kpi{border:1px solid #ccc!important;background:#fff!important;box-shadow:none}.kpi .val{font-size:14pt}.kpi .lbl,.kpi .tip{color:#666!important}.chart-grid{grid-template-columns:1fr}.section-title{color:#000!important;border-bottom:1px solid #999}.summary-line{background:#f5f5f5!important;border:1px solid #ccc}}
 </style></head><body>
-<div class="header"><h1>MT Desk v6.2.1 — {ACCOUNT}</h1>
+<div class="header"><h1>MT Desk v6.2.2 — {ACCOUNT}</h1>
 <div style="display:flex;align-items:center;gap:12px">
   <div class="meta"><span id="headerCount">{COUNT}</span> 筆交易 · P/L: <b id="headerPL" style="color:{PL_COLOR}">{PL}</b> · 獲利佔比: <b id="headerWR">{WR}</b></div>
   <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌓</button>
@@ -216,6 +256,20 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
     <div id="chart-session" style="width:100%;height:300px"></div>
   </div>
 </div>
+<!-- ══════ v6.2: CSV-Enhanced Charts (R-Multiple, Asset Class) ══════ -->
+<div id="csvSection" style="display:none">
+<div class="section-title">📈 R-Multiple 分佈與資產類別 <span style="font-size:11px;color:var(--muted);font-weight:400">（僅 CSV 匯入）</span></div>
+<div class="chart-grid">
+  <div class="chart-box" id="chart-r-box">
+    <span class="chart-tag x">X：R-Multiple 區間</span><span class="chart-tag y">Y：筆數</span>
+    <div id="chart-r" style="width:100%;height:300px"></div>
+  </div>
+  <div class="chart-box" id="chart-ac-box">
+    <span class="chart-tag x">X：資產類別</span><span class="chart-tag y">Y：筆數</span>
+    <div id="chart-ac" style="width:100%;height:300px"></div>
+  </div>
+</div>
+</div>
 <!-- ══════ Trade Table ══════ -->
 <div class="section-title">逐筆明細</div>
 <div class="toolbar"><input type="text" id="searchBox" placeholder="搜尋 Ticket / 品種 / 日期..." oninput="doSearch()">
@@ -261,6 +315,10 @@ var CHART_QUARTERLY_SYM={QUARTERLY_SYM_JSON};
 var CHART_EQUITY={EQUITY_JSON};
 var CHART_DURATION={DURATION_JSON};
 var CHART_SESSION={SESSION_JSON};
+// ── v6.2 CSV chart data ──
+var CHART_R={R_CHART_JSON};
+var CHART_AC={AC_JSON};
+var CHART_SC={SC_JSON};
 
 (function(){var s=localStorage.getItem('mt-theme');var m=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',s||m);})();
 window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(e){if(!localStorage.getItem('mt-theme')){document.documentElement.setAttribute('data-theme',e.matches?'dark':'light');initAllCharts();}});
@@ -367,9 +425,39 @@ function initAllCharts(){
       {name:'獲利佔比',type:'line',yAxisIndex:1,data:ses.wr,itemStyle:{color:'#fac858'},symbol:'circle',symbolSize:8,label:{show:true,formatter:function(p){return p.value+'%';},fontSize:10,color:tc}}
     ]
   }},isDark);
+  // ── v6.2 CSV charts ──
+  // 7. R-Multiple distribution
+  var rData=CHART_R;
+  if(rData&&rData.data){
+    document.getElementById('csvSection').style.display='block';
+    var rColor=rData.avg>=0?'#059669':'#dc2626';
+    ecOpt({id:'chart-r',opt:{
+      tooltip:{trigger:'axis',formatter:function(p){return p[0].name+'<br/>'+p[0].value+' 筆';}},
+      grid:{left:65,right:15,top:10,bottom:25},
+      xAxis:{type:'category',data:rData.labels,axisLabel:{fontSize:9,rotate:15}},
+      yAxis:{type:'value',name:'筆數',nameTextStyle:{fontSize:9,color:tc}},
+      series:[{type:'bar',data:rData.data,barWidth:'60%',
+        itemStyle:{color:function(p){var v=p.value;return v>0?'#448aff':'#ff5252';}},
+        label:{show:true,position:'top',fontSize:10,color:tc}}]
+    }},isDark);
+    // Reference line for 0R
+    var rEl=document.getElementById('chart-r');if(rEl&&rEl._ec){
+      rEl._ec.setOption({series:[{markLine:{silent:true,data:[{xAxis:'0~1R',label:{fontSize:10,color:tc}}]}}]});
+    }
+  }
+  // 8. Asset Class donut
+  var acData=CHART_AC;
+  if(acData&&acData.length){
+    ecOpt({id:'chart-ac',opt:{
+      tooltip:{trigger:'item',formatter:'{b}: {c} 筆 ({d}%)'},
+      series:[{type:'pie',radius:['40%','70%'],center:['50%','50%'],
+        label:{show:true,formatter:'{b}\n{d}%',fontSize:10,color:tc},
+        data:acData,emphasis:{scale:false}}]
+    }},isDark);
+  }
 }
 window.addEventListener('resize',function(){
-  ['chart-symbol-pie','chart-volume-donut','chart-swap-bar','chart-monthly-pl','chart-ls-monthly','chart-quarterly-sym','chart-duration','chart-equity','chart-session'].forEach(function(id){
+  ['chart-symbol-pie','chart-volume-donut','chart-swap-bar','chart-monthly-pl','chart-ls-monthly','chart-quarterly-sym','chart-duration','chart-equity','chart-session','chart-r','chart-ac'].forEach(function(id){
     var el=document.getElementById(id);if(el&&el._ec)el._ec.resize();
   });
 });
@@ -498,15 +586,36 @@ def process_file(path):
     threading.Timer(0.3,lambda:webbrowser.open(out.as_uri())).start()
     return result,len(trades)
 
+def process_csv_file(path):
+    """Process a CSV file through the imported CSV parser pipeline."""
+    from mt_desk.csv_import import import_csv
+    result=import_csv(path)
+    if not result["trades"]:
+        msg="未找到交易記錄。"
+        if result["errors"]:
+            msg+="\n\n錯誤：\n"+"\n".join(result["errors"][:5])
+            if len(result["errors"])>5:
+                msg+=f"\n...及其他{len(result['errors'])-5}個錯誤"
+        messagebox.showerror("失敗",msg)
+        return
+    trades=result["trades"]
+    stats=analyze(trades)
+    account=f"CSV_{result['detected_platform']}_{Path(path).stem}"
+    html=build_dashboard_html(account,trades,stats)
+    out=Path(tempfile.gettempdir())/f"MT_Desk_{Path(path).stem}.html"
+    out.write_text(html,encoding="utf-8")
+    threading.Timer(0.3,lambda:webbrowser.open(out.as_uri())).start()
+    return result,len(trades)
+
 def main():
-    root=tk.Tk();root.title("MT Desk v6.2.1");root.geometry("400x260")
+    root=tk.Tk();root.title("MT Desk v6.2.2");root.geometry("440x320")
     root.configure(bg="#f0f2f5");root.resizable(False,False)
-    tk.Label(root,text="MT Desk v6.2.1",font=("Segoe UI",22,"bold"),fg="#2563eb",bg="#f0f2f5").pack(pady=(24,4))
-    tk.Label(root,text="6 張長期交易習慣分析圖表 · ECharts",font=("Segoe UI",10),fg="#6b7280",bg="#f0f2f5").pack(pady=(0,20))
-    status_var=tk.StringVar(value="選擇 HTML 報表檔案")
+    tk.Label(root,text="MT Desk v6.2.2",font=("Segoe UI",22,"bold"),fg="#2563eb",bg="#f0f2f5").pack(pady=(24,4))
+    tk.Label(root,text="CSV 匯入 + R-Multiple 分析 · 移植自 trading-record-analysis",font=("Segoe UI",10),fg="#6b7280",bg="#f0f2f5").pack(pady=(0,20))
+    status_var=tk.StringVar(value="選擇 HTML 或 CSV 檔案")
     status=tk.Label(root,textvariable=status_var,font=("Segoe UI",9),fg="#6b7280",bg="#f0f2f5");status.pack(pady=(0,14))
-    def open_file():
-        paths=filedialog.askopenfilenames(title="選擇 MT4/MT5 報表",filetypes=[("HTML","*.htm *.html")])
+    def open_html():
+        paths=filedialog.askopenfilenames(title="選擇 MT4/MT5 HTML 報表",filetypes=[("HTML","*.htm *.html")])
         if not paths:return
         def worker():
             total=len(paths)
@@ -517,8 +626,22 @@ def main():
                 except Exception as e:root.after(0,lambda err=str(e):messagebox.showerror("錯誤",err))
             root.after(0,lambda t=total:status_var.set(f"✅ 完成 — {t} 個檔案"))
         threading.Thread(target=worker,daemon=True).start()
+    def open_csv():
+        paths=filedialog.askopenfilenames(title="選擇 MT4/MT5 CSV 歷史記錄",filetypes=[("CSV","*.csv")])
+        if not paths:return
+        def worker():
+            total=len(paths)
+            for i,path in enumerate(paths,1):
+                fname=Path(path).name
+                root.after(0,lambda f=fname,i=i,t=total:status_var.set(f"⏳ CSV ({i}/{t}): {f}"))
+                try:process_csv_file(path)
+                except Exception as e:root.after(0,lambda err=str(e):messagebox.showerror("CSV匯入錯誤",err))
+            root.after(0,lambda t=total:status_var.set(f"✅ CSV 完成 — {t} 個檔案"))
+        threading.Thread(target=worker,daemon=True).start()
     tk.Button(root,text="📂 選擇 MT4/MT5 HTML 報表",font=("Segoe UI",12),bg="#2563eb",fg="white",
-        relief="flat",padx=24,pady=10,command=open_file,cursor="hand2").pack()
+        relief="flat",padx=24,pady=10,command=open_html,cursor="hand2").pack(pady=(0,6))
+    tk.Button(root,text="📄 選擇 MT4/MT5 CSV 歷史記錄",font=("Segoe UI",12),bg="#16a34a",fg="white",
+        relief="flat",padx=24,pady=10,command=open_csv,cursor="hand2").pack()
     root.mainloop()
 
 if __name__=="__main__":main()

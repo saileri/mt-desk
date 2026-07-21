@@ -1,13 +1,15 @@
 [project]
 name = "mt-desk"
-version = "6.2.1"
-description = "MT4/MT5 Trading Analytics Desktop — Multi-account comparison dashboard"
+version = "6.2.2"
+description = "MT4/MT5 Trading Analytics Desktop — CSV import + R-Multiple analysis (ported from trading-record-analysis)"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "saileri" }]
 
-dependencies = []
+dependencies = [
+    "pyyaml>=6.0",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -26,7 +28,9 @@ name = "MT Desk"
 onefile = true
 noconsole = true
 icon = "assets/icon.ico"
-add_data = []
+add_data = [
+    "mt_desk/config/*:mt_desk/config/",
+]
 hidden_imports = [
     "tkinter",
     "tkinter.filedialog",
@@ -34,4 +38,7 @@ hidden_imports = [
     "mt_desk",
     "mt_desk.parser",
     "mt_desk.analysis",
+    "mt_desk.csv_import",
+    "mt_desk.field_mapper",
+    "yaml",
 ]

@@ -88,6 +88,33 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
         sym_volume[t["symbol"]] += t.get("volume", 0)
         sym_swap[t["symbol"]] += t.get("swap", 0)
 
+    # ── CSV-only: R-Multiple statistics ──
+    r_values = [t["actual_r"] for t in trades if t.get("actual_r") is not None]
+    avg_r = sum(r_values) / len(r_values) if r_values else 0
+
+    # ── CSV-only: Net PnL statistics ──
+    net_pnl_total = sum(t.get("net_pnl", t["profit"]) for t in trades)
+
+    # ── CSV-only: Asset class statistics ──
+    asset_class_pl: dict[str, float] = defaultdict(float)
+    asset_class_count: dict[str, int] = defaultdict(int)
+    for t in trades:
+        ac = t.get("asset_class", "Unknown")
+        asset_class_pl[ac] += t["profit"]
+        asset_class_count[ac] += 1
+
+    # ── CSV-only: Session win-rate (extended) ──
+    session_csv: dict[str, dict[str, float]] = {}
+    for t in trades:
+        ses = t.get("session")
+        if ses:
+            if ses not in session_csv:
+                session_csv[ses] = {"cnt": 0, "pl": 0.0, "wins": 0}
+            session_csv[ses]["cnt"] += 1
+            session_csv[ses]["pl"] += t["profit"]
+            if t["profit"] > 0:
+                session_csv[ses]["wins"] += 1
+
     sym_stats = []
     for sym in sorted(sym_pl, key=sym_pl.get, reverse=True):
         sym_stats.append({
@@ -217,4 +244,11 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
         "ls_monthly": dict(sorted(ls_monthly.items())),
         "quarterly_sym": dict(sorted(quarterly_sym.items())),
         "session": session,
+        # CSV-enhanced stats
+        "avg_r": round(avg_r, 2),
+        "r_multiples": [round(r, 2) for r in r_values],
+        "net_pnl_total": round(net_pnl_total, 2),
+        "asset_class_pl": dict(asset_class_pl),
+        "asset_class_count": dict(asset_class_count),
+        "session_csv": session_csv,
     }
