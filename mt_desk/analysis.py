@@ -71,6 +71,13 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
         if t["profit"] > 0:
             sym_wins[sym] += 1
 
+    # ── v5: swap & volume totals ──
+    total_swap = sum(t.get("swap", 0) for t in trades)
+    total_volume = sum(t.get("volume", 0) for t in trades)
+    sym_volume: dict[str, float] = defaultdict(float)
+    for t in trades:
+        sym_volume[t["symbol"]] += t.get("volume", 0)
+
     sym_stats = []
     for sym in sorted(sym_pl, key=sym_pl.get, reverse=True):
         sym_stats.append({
@@ -148,4 +155,7 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
         "monthly": dict(sorted(monthly.items())),
         "hourly": dict(sorted(hourly.items())),
         "daily_pl": dict(daily_pl),
+        "total_swap": round(total_swap, 2),
+        "total_volume": round(total_volume, 2),
+        "sym_volume": dict(sym_volume),
     }

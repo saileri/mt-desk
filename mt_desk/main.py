@@ -1,24 +1,18 @@
 #!/usr/bin/env python3
-"""MT Desk v4.2 — Reference-matching 8 charts, date filter in browser. Zero deps."""
+"""MT Desk v5 — Symbol preference pie, volume, swap summary. 13-column trade table."""
 import json,io,os,sys,tempfile,tkinter as tk,threading,webbrowser
 from tkinter import filedialog,messagebox
 from datetime import datetime
 from pathlib import Path
 from mt_desk.parser import parse_statement
 from mt_desk.analysis import analyze
-from mt_desk.charts import *
+# charts module no longer used (v5 replaced charts with summary section)
 
 if sys.stdout is None:sys.stdout=io.StringIO()
 if sys.stderr is None:sys.stderr=sys.stdout
 ECHARTS_CDN="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js"
 
 def build_dashboard_html(account,trades,stats):
-    chart_configs={
-        "equity":chart_equity(stats),"winloss":chart_winloss_count(stats),
-        "pnl_stats":chart_pnl_stats(stats),"symbol":chart_symbol_table(stats),
-        "profit_curve":chart_profit_curve(stats),"symbol_group":chart_symbol_grouped(stats),
-        "pnl_hist":chart_pnl_histogram(stats,trades),"hourly":chart_hourly_area(stats),
-    }
     cards=[
         ("總交易",str(stats["count"]),""),("總盈虧",f"${stats['total_pl']:+,.2f}","--green" if stats["total_pl"]>=0 else"--red"),
         ("勝率",f"{stats['wr']:.0f}%","--green"),("盈利因子",f"{stats['pf']:.2f}" if stats["pf"]!=float("inf") else"∞","--muted"),
@@ -27,20 +21,46 @@ def build_dashboard_html(account,trades,stats):
         ("連續盈利",f"{stats['max_win_streak']}筆","--muted"),("連續虧損",f"{stats['max_loss_streak']}筆","--muted"),
     ]
     card_html="".join(f'<div class="kpi"><span class="lbl">{l}</span><span class="val" style="color:var({c})">{v}</span></div>' for l,v,c in cards)
-    chart_divs=[]
-    chart_names={"equity":"權益曲線","winloss":"交易次數","pnl_stats":"盈虧統計","symbol":"品種盈虧",
-                 "profit_curve":"盈利曲線","symbol_group":"品種盈虧統計","pnl_hist":"交易盈虧分佈","hourly":"交易時段分佈"}
-    for key,h in[("equity","400px"),("winloss","280px"),("pnl_stats","300px"),("symbol","320px"),
-                 ("profit_curve","320px"),("symbol_group","300px"),("pnl_hist","300px"),("hourly","280px")]:
-        w="wide" if key in("equity","profit_curve") else""
-        chart_divs.append(f'<div class="chart-card {w}"><div id="chart-{key}" style="width:100%;height:{h}"></div><div class="chart-label">{chart_names[key]}</div></div>')
+    # ── v5 top section: symbol pie, volume, swap ──
+    sym_pie_data=[{"name":s.upper(),"value":c} for s,c in stats["sym_count"].items()]
+    sym_pie_json=json.dumps(sym_pie_data,ensure_ascii=False)
+    total_swap_val=stats["total_swap"]
+    total_volume_val=stats["total_volume"]
+    swap_color="#00e676" if total_swap_val>=0 else"#ff5252"
+    summary_html=f'''<div class="summary-row">
+  <div class="summary-card" style="grid-column:span 2">
+    <div class="summary-title">品種偏好（交易次數佔比）</div>
+    <div id="chart-symbol-pie" style="width:100%;height:300px"></div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-title">交易量</div>
+    <div class="summary-val">{total_volume_val:.2f} 手</div>
+    <div class="summary-sub">總交易手數</div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-title">Swap / 利息</div>
+    <div class="summary-val" style="color:{swap_color}">${total_swap_val:+,.2f}</div>
+    <div class="summary-sub">累計隔夜利息</div>
+  </div>
+</div>'''
     # All trades as JSON (for client-side date filtering)
-    all_trades=[{"ticket":str(t["ticket"]),"open":t["open_time"].strftime("%Y-%m-%d %H:%M") if t["open_time"] else"-",
-        "close":t["close_time"].strftime("%Y-%m-%d %H:%M") if t["close_time"] else"-","type":t["type"].upper(),
-        "symbol":t["symbol"].upper(),"volume":t["volume"],"profit":round(t["profit"],2),
-        "open_date":t["open_time"].strftime("%Y-%m-%d") if t["open_time"] else""} for t in trades]
+    all_trades=[{
+        "ticket":str(t["ticket"]),
+        "open":t["open_time"].strftime("%Y-%m-%d %H:%M") if t["open_time"] else"-",
+        "close":t["close_time"].strftime("%Y-%m-%d %H:%M") if t["close_time"] else"-",
+        "type":t["type"].upper(),
+        "volume":t["volume"],
+        "symbol":t["symbol"].upper(),
+        "open_price":round(t.get("open_price",0),5),
+        "close_price":round(t.get("close_price",0),5),
+        "sl":round(t.get("sl",0),5),
+        "tp":round(t.get("tp",0),5),
+        "commission":round(t.get("commission",0),2),
+        "swap":round(t.get("swap",0),2),
+        "profit":round(t["profit"],2),
+        "open_date":t["open_time"].strftime("%Y-%m-%d") if t["open_time"] else"",
+    } for t in trades]
     trade_json=json.dumps(all_trades,ensure_ascii=False)
-    configs_json=json.dumps(chart_configs,ensure_ascii=False)
     pl_color="#69f0ae" if stats["total_pl"]>=0 else"#ff8a80"
     # Date range for the full data
     all_dates=sorted(set(t["open_date"] for t in all_trades if t["open_date"]))
@@ -49,8 +69,8 @@ def build_dashboard_html(account,trades,stats):
     html=_HTML.replace("{ACCOUNT}",account).replace("{COUNT}",str(stats["count"]))
     html=html.replace("{PL}",f"${stats['total_pl']:+,.2f}").replace("{PL_COLOR}",pl_color)
     html=html.replace("{WR}",f"{stats['wr']:.0f}%").replace("{CARDS}",card_html)
-    html=html.replace("{CHARTS}","".join(chart_divs)).replace("{TRADE_JSON}",trade_json)
-    html=html.replace("{ECHART_CDN}",ECHARTS_CDN).replace("{CONFIGS}",configs_json)
+    html=html.replace("{CHARTS}",summary_html).replace("{TRADE_JSON}",trade_json)
+    html=html.replace("{ECHART_CDN}",ECHARTS_CDN).replace("{SYM_PIE_DATA}",sym_pie_json)
     html=html.replace("{DATE_MIN}",date_min).replace("{DATE_MAX}",date_max)
     return html
 
@@ -84,14 +104,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 .toolbar button,.toolbar select{padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--muted);cursor:pointer;font-size:clamp(10px,0.8vw,13px);font-family:inherit}
 .toolbar button:hover{background:var(--card);border-color:var(--blue);color:var(--text)}
 .toolbar .nav-btn{min-width:30px;text-align:center}.toolbar .page-info{font-size:clamp(10px,0.8vw,13px);color:var(--muted);margin:0 3px}
-.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:clamp(10px,0.8vw,13px)}
 th{background:var(--surface);padding:clamp(6px,0.5vw,8px) clamp(8px,0.7vw,12px);text-align:left;font-weight:600;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap;color:var(--muted);font-size:clamp(9px,0.7vw,11px)}
 th:hover{color:var(--text)}th .sort-arrow{font-size:8px;margin-left:3px;color:var(--blue)}
 td{padding:clamp(4px,0.4vw,6px) clamp(8px,0.7vw,12px);border-bottom:1px solid var(--border);color:var(--text)}
 tr:hover td{background:var(--surface)}.win{color:var(--green)!important}.loss{color:var(--red)!important}
 tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
-@media(max-width:768px){.charts{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(3,1fr)}}
+.summary-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+.summary-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;justify-content:center;min-height:120px}
+.summary-title{font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:500}
+.summary-val{font-size:28px;font-weight:700;color:var(--text)}
+.summary-sub{font-size:11px;color:var(--muted);margin-top:4px}
+@media(max-width:768px){.summary-row{grid-template-columns:1fr 1fr}.charts{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(3,1fr)}}
 </style></head><body>
 <div class="header"><h1>MT Desk — {ACCOUNT}</h1>
 <div style="display:flex;align-items:center;gap:12px">
@@ -107,7 +132,7 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
   <span class="lbl" id="filterInfo"></span>
 </div>
 <div class="main"><div class="kpi-row" id="kpiRow">{CARDS}</div>
-<div class="charts">{CHARTS}</div>
+{CHARTS}
 <div class="section-title" style="margin:12px 0 6px">逐筆明細</div>
 <div class="toolbar"><input type="text" id="searchBox" placeholder="搜尋 Ticket..." oninput="doSearch()">
 <span id="searchInfo" style="font-size:clamp(10px,0.8vw,13px);color:var(--muted)"></span><span style="flex:1"></span>
@@ -122,8 +147,15 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 <th onclick="sortBy('type')">方向<span class="sort-arrow" id="sa-type"></span></th>
 <th onclick="sortBy('volume')">手數<span class="sort-arrow" id="sa-volume"></span></th>
 <th onclick="sortBy('symbol')">品種<span class="sort-arrow" id="sa-symbol"></span></th>
+<th onclick="sortBy('open_price')">開倉價<span class="sort-arrow" id="sa-open_price"></span></th>
+<th onclick="sortBy('sl')">S/L<span class="sort-arrow" id="sa-sl"></span></th>
+<th onclick="sortBy('tp')">T/P<span class="sort-arrow" id="sa-tp"></span></th>
 <th onclick="sortBy('close')">平倉<span class="sort-arrow" id="sa-close"></span></th>
-<th onclick="sortBy('profit')">盈虧<span class="sort-arrow" id="sa-profit"></span></th></tr></thead>
+<th onclick="sortBy('close_price')">平倉價<span class="sort-arrow" id="sa-close_price"></span></th>
+<th onclick="sortBy('commission')">佣金<span class="sort-arrow" id="sa-commission"></span></th>
+<th onclick="sortBy('swap')">Swap<span class="sort-arrow" id="sa-swap"></span></th>
+<th onclick="sortBy('profit')">盈虧<span class="sort-arrow" id="sa-profit"></span></th>
+</tr></thead>
 <tbody id="tradeBody"></tbody></table></div>
 <div class="toolbar" style="justify-content:flex-end;margin-top:6px">
 <span class="page-info" id="pageInfo2"></span>
@@ -132,31 +164,35 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 <button class="nav-btn" onclick="currentPage=totalPages;renderTable()">»</button></div></div>
 <script src="{ECHART_CDN}"></script>
 <script>
-var CONFIGS={CONFIGS};
 var ALL_TRADES={TRADE_JSON};
+var SYM_PIE_DATA={SYM_PIE_DATA};
 var data=ALL_TRADES.slice();
 (function(){var s=localStorage.getItem('mt-theme');var m=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',s||m);})();
 window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(e){if(!localStorage.getItem('mt-theme')){document.documentElement.setAttribute('data-theme',e.matches?'dark':'light');initCharts();}});
 function toggleTheme(){var c=document.documentElement.getAttribute('data-theme');var n=c==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('mt-theme',n);initCharts();}
 function initCharts(){
   var isDark=document.documentElement.getAttribute('data-theme')==='dark';
-  var tc=isDark?'#e2e8f0':'#1f2937';var mc=isDark?'#64748b':'#6b7280';
-  ['equity','winloss','pnl_stats','symbol','profit_curve','symbol_group','pnl_hist','hourly'].forEach(function(k){
-    var el=document.getElementById('chart-'+k);if(!el||!CONFIGS[k]||CONFIGS[k]==='null')return;
-    if(el._echart)el._echart.dispose();
-    var opt=JSON.parse(CONFIGS[k]);
-    if(opt.legend&&opt.legend.textStyle)opt.legend.textStyle.color=tc;
-    if(opt.graphic)opt.graphic.forEach(function(g){if(g.style&&g.style.fill)g.style.fill=tc;});
-    ['xAxis','yAxis'].forEach(function(a){
-      var ax=opt[a];if(!ax)return;
-      if(Array.isArray(ax))ax.forEach(function(x){if(x.axisLabel)x.axisLabel.color=mc;});
-      else{if(ax.axisLabel)ax.axisLabel.color=mc;}
-    });
-    var chart=echarts.init(el,isDark?'dark':null);
-    chart.setOption(opt);el._echart=chart;
-  });
+  var tc=isDark?'#e2e8f0':'#1f2937';
+  var el=document.getElementById('chart-symbol-pie');
+  if(!el)return;
+  if(el._echart)el._echart.dispose();
+  var colors=['#5470c6','#91cc75','#fac858','#ee6666','#73c0de','#3ba272','#fc8452','#9a60b4','#ea7ccc','#48b8d0'];
+  var opt={
+    tooltip:{trigger:'item',formatter:'{b}: {c} 筆 ({d}%)'},
+    legend:{bottom:0,textStyle:{color:tc,fontSize:10}},
+    color:colors,
+    series:[{
+      type:'pie',radius:['45%','75%'],center:['50%','48%'],
+      avoidLabelOverlap:false,
+      label:{show:true,formatter:'{b} {d}%',fontSize:10,color:tc},
+      data:SYM_PIE_DATA,
+      emphasis:{scale:false}
+    }]
+  };
+  var chart=echarts.init(el,isDark?'dark':null);
+  chart.setOption(opt);el._echart=chart;
 }
-window.addEventListener('resize',function(){['equity','winloss','pnl_stats','symbol','profit_curve','symbol_group','pnl_hist','hourly'].forEach(function(k){var el=document.getElementById('chart-'+k);if(el&&el._echart)el._echart.resize();});});
+window.addEventListener('resize',function(){var el=document.getElementById('chart-symbol-pie');if(el&&el._echart)el._echart.resize();});
 initCharts();
 
 // Date filter
@@ -197,7 +233,7 @@ function sortBy(col){if(sortCol===col)sortDir*=-1;else{sortCol=col;sortDir=-1;}d
 function doSearch(){var q=document.getElementById('searchBox').value.trim().toLowerCase();searchMatches=[];searchIdx=-1;if(!q){data=applyCurrentFilter();document.getElementById('searchInfo').textContent='';}else{data=applyCurrentFilter().filter(function(t){return String(t.ticket).toLowerCase().indexOf(q)>=0;});document.getElementById('searchInfo').textContent=data.length+' 條匹配';ALL_TRADES.forEach(function(t,i){if(String(t.ticket).toLowerCase().indexOf(q)>=0)searchMatches.push(i);});}currentPage=1;renderTable();}
 function applyCurrentFilter(){var df=document.getElementById('dateFrom').value;var dt=document.getElementById('dateTo').value;if(!df&&!dt)return ALL_TRADES.slice();return ALL_TRADES.filter(function(t){if(df&&t.open_date<df)return false;if(dt&&t.open_date>dt)return false;return true;});}
 document.getElementById('searchBox').addEventListener('keydown',function(e){if(e.key==='Enter'&&searchMatches.length>0){e.preventDefault();searchIdx=(searchIdx+1)%searchMatches.length;var gi=searchMatches[searchIdx];currentPage=Math.floor(gi/pageSize)+1;renderTable();setTimeout(function(){var rows=document.querySelectorAll('#tradeBody tr');rows.forEach(function(r){r.classList.remove('highlight');});var li=gi%pageSize;if(rows[li]){rows[li].classList.add('highlight');rows[li].scrollIntoView({behavior:'smooth',block:'center'});}document.getElementById('searchInfo').textContent=(searchIdx+1)+'/'+searchMatches.length+' 條匹配';},30);}});
-function renderTable(){totalPages=Math.ceil(data.length/pageSize)||1;if(currentPage>totalPages)currentPage=totalPages;var start=(currentPage-1)*pageSize;var page=data.slice(start,start+pageSize);var h='';page.forEach(function(t){h+='<tr class="'+(t.profit>0?'win':'loss')+'"><td>'+t.ticket+'</td><td>'+t.open+'</td><td>'+t.type+'</td><td>'+t.volume+'</td><td>'+t.symbol+'</td><td>'+t.close+'</td><td>$'+t.profit.toFixed(2)+'</td></tr>';});document.getElementById('tradeBody').innerHTML=h;var info=currentPage+'/'+totalPages+' ('+data.length+'筆)';document.getElementById('pageInfo').textContent=info;document.getElementById('pageInfo2').textContent=info;}
+function renderTable(){totalPages=Math.ceil(data.length/pageSize)||1;if(currentPage>totalPages)currentPage=totalPages;var start=(currentPage-1)*pageSize;var page=data.slice(start,start+pageSize);var h='';page.forEach(function(t){var cls=t.profit>0?'win':'loss';h+='<tr class="'+cls+'"><td>'+t.ticket+'</td><td>'+t.open+'</td><td>'+t.type+'</td><td>'+t.volume+'</td><td>'+t.symbol+'</td><td>'+(t.open_price||'-')+'</td><td>'+(t.sl||'-')+'</td><td>'+(t.tp||'-')+'</td><td>'+t.close+'</td><td>'+(t.close_price||'-')+'</td><td>$'+(t.commission||0).toFixed(2)+'</td><td>$'+(t.swap||0).toFixed(2)+'</td><td class="'+cls+'">$'+t.profit.toFixed(2)+'</td></tr>';});document.getElementById('tradeBody').innerHTML=h;var info=currentPage+'/'+totalPages+' ('+data.length+'筆)';document.getElementById('pageInfo').textContent=info;document.getElementById('pageInfo2').textContent=info;}
 renderTable();document.getElementById('sa-profit').textContent='▼';</script></body></html>"""
 
 def process_file(path):
