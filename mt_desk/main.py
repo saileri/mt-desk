@@ -26,8 +26,6 @@ def build_dashboard_html(account,trades,stats):
         ("夏普比率",f"{stats['sharpe']:.2f}","風險調整後報酬，<0 表示平均每日回報為負","--muted"),
         ("最佳",f"+${stats['best']:,.2f}","單筆最大盈利","--green"),
         ("最差",f"-${abs(stats['worst']):,.2f}","單筆最大虧損","--red"),
-        ("最長連勝",f"{stats['max_win_streak']}筆","按時間順序連續盈利的最長筆數（非全部連續）","--muted"),
-        ("最長連敗",f"{stats['max_loss_streak']}筆","按時間順序連續虧損的最長筆數（非全部連續）","--muted"),
     ]
     card_html="".join(f'<div class="kpi has-tip"><span class="lbl">{l}</span><span class="val" style="color:var({c})">{v}</span><span class="tip">{tip}</span></div>' for l,v,tip,c in cards)
     # ── v5 top section: symbol pie, volume, swap ──
@@ -239,7 +237,7 @@ function updateKPIs(){
   document.getElementById('headerWR').textContent=(total?(wins/total*100).toFixed(0):0)+'%';
   var vals=[total,'$'+(pl>=0?'+':'')+pl.toFixed(2),(total?(wins/total*100).toFixed(0):0)+'%',
     '+$'+avgW.toFixed(2),'-$'+avgL.toFixed(2),plr.toFixed(2),pf.toFixed(2),
-    'N/A','N/A','$'+(best!==-Infinity?'+':'')+best.toFixed(2),'$-'+Math.abs(worst).toFixed(2),'N/A','N/A'];
+    'N/A','N/A','$'+(best!==-Infinity?'+':'')+best.toFixed(2),'$-'+Math.abs(worst).toFixed(2)];
   var kpiVals=document.querySelectorAll('.kpi .val');
   for(var i=0;i<Math.min(vals.length,kpiVals.length);i++){kpiVals[i].textContent=vals[i];}
 }
@@ -265,7 +263,6 @@ renderTable();document.getElementById('sa-profit').textContent='▼';</script>
 <p><b>最大回撤</b>：權益曲線從歷史最高點到之後最低點的跌幅（美元）。衡量最壞情況下虧了多少。公式：max(0, max(peak − equity))。</p>
 <p><b>夏普比率</b>：風險調整後報酬 = 日均盈虧均值 ÷ 日均盈虧標準差 × √252。<b style="color:var(--red)">&lt;0</b> 表示平均每日回報為負。</p>
 <p><b>最佳／最差</b>：單筆交易的最大盈利與最大虧損金額。</p>
-<p><b>最長連勝／連敗</b>：按開倉時間排序後，profit > 0（或 ≤0）連續出現的最長筆數。</p>
 </div></details></div>
 </body></html>"""
 
