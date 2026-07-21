@@ -34,27 +34,46 @@ def build_dashboard_html(account,trades,stats):
     r_kpi_html=""
     card_html="".join(f'<div class="kpi has-tip"><span class="lbl">{l}</span><span class="val" style="color:var({c})">{v}</span><span class="tip">{tip}</span></div>' for l,v,tip,c in cards)+r_kpi_html
     # ── Summary top section ──
-    sym_pie_data=[{"name":s.upper(),"value":c} for s,c in stats["sym_count"].items()]
-    sym_pie_json=json.dumps(sym_pie_data,ensure_ascii=False)
+    sym_keys=list(stats["sym_count"].keys());sym_n=len(sym_keys)
     total_swap_val=stats["total_swap"];total_volume_val=stats["total_volume"]
     swap_color="#00e676" if total_swap_val>=0 else"#ff5252"
-    # volume donut data
-    vol_data=[{"name":s.upper(),"value":round(v,2)} for s,v in stats["sym_volume"].items()]
-    vol_json=json.dumps(sorted(vol_data,key=lambda x:x["value"],reverse=True),ensure_ascii=False)
-    # swap bar data
+    # swap bar data (stays independent)
     sw_data=[{"name":s.upper(),"value":round(v,2)} for s,v in stats["sym_swap"].items()]
     sw_json=json.dumps(sorted(sw_data,key=lambda x:x["value"]),ensure_ascii=False)
+    # Combined symbol bar chart data (sorted by count desc)
+    sym_bar_data=sorted([
+        {"name":s.upper(),"count":stats["sym_count"][s],"volume":round(stats["sym_volume"].get(s,0),2)}
+        for s in sym_keys
+    ],key=lambda x:x["count"],reverse=True)
+    sym_bar_json=json.dumps(sym_bar_data,ensure_ascii=False)
+    is_single_sym=sym_n<=1
+    # Single-symbol banner
+    single_sym_name=sym_keys[0].upper() if is_single_sym and sym_n==1 else ""
+    single_sym_banner=f'''
+  <div class="summary-card" style="grid-column:span 3;display:flex;align-items:center;justify-content:center;min-height:100px">
+    <div style="text-align:center">
+      <span style="font-size:32px;margin-right:10px">🔥</span>
+      <span style="font-size:15px;color:var(--muted)">當前周期內專注交易單一品種：</span>
+      <span style="font-size:20px;font-weight:700;color:var(--blue)">{single_sym_name}</span>
+      <div style="margin-top:6px;font-size:12px;color:var(--muted)">
+        {stats["sym_count"][sym_keys[0]]} 筆交易 · {stats["sym_volume"].get(sym_keys[0],0):.2f} 手 · P/L ${stats["sym_pl"].get(sym_keys[0],0):+,.2f}
+      </div>
+    </div>
+  </div>''' if is_single_sym else ""
+
     summary_html=f'''<div class="summary-row">
-  <div class="summary-card" style="grid-column:span 2">
-    <div class="summary-title">品種偏好（交易次數佔比）<span style="font-size:10px;color:var(--muted);font-weight:400"> 💡 點擊品種可篩選明細</span></div>
-    <div id="chart-symbol-pie" style="width:100%;height:300px"></div>
+  <div id="symBarCard" class="summary-card" style="grid-column:span 2;{'display:none' if is_single_sym else ''}">
+    <div class="summary-title" style="display:flex;align-items:center;gap:8px">
+      <span>品種偏好</span>
+      <span style="font-size:10px;color:var(--muted);font-weight:400"> 💡 點擊品種可篩選明細</span>
+      <span style="flex:1"></span>
+      <span id="symToggleBtn" class="quick-btn active" style="font-size:10px;padding:2px 8px;cursor:pointer" onclick="toggleSymView()">📊 按次數</span>
+    </div>
+    <div id="chart-symbol-bar" style="width:100%;height:260px"></div>
   </div>
+  {single_sym_banner}
   <div class="summary-card">
-    <div class="summary-title">交易量佔比 <span style="font-size:10px;color:var(--muted);font-weight:400">{total_volume_val:.2f} 手</span></div>
-    <div id="chart-volume-donut" style="width:100%;height:200px"></div>
-  </div>
-  <div class="summary-card">
-    <div class="summary-title">Swap / 利息 <span style="font-size:10px;color:{swap_color};font-weight:400">${total_swap_val:+,.2f}</span></div>
+    <div class="summary-title">Swap / 利息 <span style="font-size:10px;color:var(--muted);font-weight:400">${total_swap_val:+,.2f}</span></div>
     <div id="chart-swap-bar" style="width:100%;height:200px"></div>
   </div>
 </div>'''
@@ -135,8 +154,8 @@ def build_dashboard_html(account,trades,stats):
     html=html.replace("{PL}",f"${stats['total_pl']:+,.2f}").replace("{PL_COLOR}",pl_color)
     html=html.replace("{WR}",f"{stats['wr']:.0f}%").replace("{CARDS}",card_html)
     html=html.replace("{SUMMARY}",summary_html).replace("{TRADE_JSON}",trade_json)
-    html=html.replace("{ECHART_CDN}",ECHARTS_CDN).replace("{SYM_PIE_DATA}",sym_pie_json)
-    html=html.replace("{VOL_JSON}",vol_json).replace("{SWAP_JSON}",sw_json)
+    html=html.replace("{ECHART_CDN}",ECHARTS_CDN).replace("{SYM_BAR_JSON}",sym_bar_json)
+    html=html.replace("{SWAP_JSON}",sw_json)
     html=html.replace("{DATE_MIN}",date_min).replace("{DATE_MAX}",date_max)
     # v6.1 chart JSON
     html=html.replace("{MONTHLY_PL_JSON}",monthly_pl_json)
@@ -303,8 +322,7 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 <script src="{ECHART_CDN}"></script>
 <script>
 var ALL_TRADES={TRADE_JSON};
-var SYM_PIE_DATA={SYM_PIE_DATA};
-var VOL_DATA={VOL_JSON};
+var SYM_BAR_DATA={SYM_BAR_JSON};
 var SWAP_DATA={SWAP_JSON};
 var data=ALL_TRADES.slice();
 
@@ -336,17 +354,51 @@ function initAllCharts(){
   var isDark=document.documentElement.getAttribute('data-theme')==='dark';
   var tc=isDark?'#e2e8f0':'#1f2937';
   var C10=isDark?['#448aff','#69f0ae','#ffd740','#ff5252','#40c4ff','#b2ff59','#ff6e40','#b388ff','#ff80ab','#84ffff']:['#2563eb','#059669','#f59e0b','#dc2626','#0284c7','#16a34a','#ea580c','#7c3aed','#db2777','#0891b2'];
-  // 0. Symbol pie
-  ecOpt({id:'chart-symbol-pie',opt:{
-    tooltip:{trigger:'item',formatter:'{b}: {c} 筆 ({d}%)'},legend:{bottom:0,textStyle:{color:tc,fontSize:10}},color:C10,
-    series:[{type:'pie',radius:['45%','75%'],center:['50%','48%'],avoidLabelOverlap:false,label:{show:true,formatter:'{b} {d}%',fontSize:10,color:tc},data:SYM_PIE_DATA,emphasis:{scale:false}}]
-  }},isDark);
-  // Volume donut
-  ecOpt({id:'chart-volume-donut',opt:{
-    tooltip:{trigger:'item',formatter:'{b}: {c} 手 ({d}%)'},
-    series:[{type:'pie',radius:['50%','75%'],center:['50%','50%'],avoidLabelOverlap:false,
-      label:{show:true,formatter:'{b}\n{d}%',fontSize:10,color:tc},data:VOL_DATA,emphasis:{scale:false}}]
-  }},isDark);
+  // 0. Combined symbol bar chart (count mode by default, toggle to volume)
+  var symView='count';
+  function renderSymBar(){
+    var el=document.getElementById('chart-symbol-bar');if(!el)return;
+    if(el._ec)el._ec.dispose();
+    var isFirst=symView==='count'?true:false;
+    var rawData=SYM_BAR_DATA;
+    if(!rawData||!rawData.length)return;
+    var names=rawData.map(function(d){return d.name;});
+    var vals=rawData.map(function(d){return symView==='count'?d.count:d.volume;});
+    var maxVal=Math.max.apply(null,vals);
+    var colors=isFirst?['#448aff']:['#0ea5e9'];
+    var chart=echarts.init(el,isDark?'dark':null);
+    chart.setOption({
+      tooltip:{trigger:'axis',formatter:function(p){
+        var idx=p[0].dataIndex;
+        var d=rawData[idx];
+        return '<b>'+d.name+'</b><br/>次數: '+d.count+' 筆<br/>手數: '+d.volume.toFixed(2)+' 手';
+      }},
+      grid:{left:70,right:40,top:8,bottom:20},
+      xAxis:{type:'value',axisLabel:{fontSize:9}},
+      yAxis:{type:'category',data:names,axisLabel:{fontSize:10,fontWeight:'500'},axisLine:{show:false},axisTick:{show:false}},
+      series:[{
+        type:'bar',data:vals,barWidth:'60%',barMaxWidth:20,
+        itemStyle:{color:function(p){
+          var v=p.value;if(symView==='count')return'#448aff';
+          var pct=v/maxVal;return pct>0.5?'#0ea5e9':pct>0.2?'#38bdf8':'#7dd3fc';
+        },borderRadius:[0,4,4,0]},
+        label:{show:true,position:'right',formatter:function(p){
+          var d=rawData[p.dataIndex];
+          var cnt=d.count,vol=d.volume.toFixed(2);
+          return symView==='count'?cnt+' 筆':vol+' 手';
+        },fontSize:10,color:tc}
+      }]
+    });
+    el._ec=chart;
+    chart.on('click',function(params){if(params.name)filterBySymbol(params.name);});
+  }
+  function toggleSymView(){
+    var btn=document.getElementById('symToggleBtn');
+    if(symView==='count'){symView='volume';btn.textContent='📊 按手數';}
+    else{symView='count';btn.textContent='📊 按次數';}
+    renderSymBar();
+  }
+  renderSymBar();
   // Swap bar
   var swData=SWAP_DATA.slice().reverse();
   var swNames=swData.map(function(d){return d.name;});
@@ -527,7 +579,7 @@ function updateChartsFromFilter(){
   CHART_DURATION={labels:Object.keys(dur_buckets),data:Object.values(dur_buckets)};
   var sesLabels=Object.keys(session);CHART_SESSION={labels:sesLabels,cnt:sesLabels.map(function(k){return session[k].cnt;}),wr:sesLabels.map(function(k){return session[k].cnt>0?Math.round(session[k].wins/session[k].cnt*100):0;})};
   // Update symbol pie
-  var symCount={},symVol={},symSwap={};data.forEach(function(t){symCount[t.symbol]=(symCount[t.symbol]||0)+1;symVol[t.symbol]=(symVol[t.symbol]||0)+(t.volume||0);symSwap[t.symbol]=(symSwap[t.symbol]||0)+(t.swap||0);});SYM_PIE_DATA=Object.keys(symCount).map(function(s){return{name:s,value:symCount[s]};});VOL_DATA=Object.keys(symVol).map(function(s){return{name:s,value:Math.round(symVol[s]*100)/100};}).sort(function(a,b){return b.value-a.value;});SWAP_DATA=Object.keys(symSwap).map(function(s){return{name:s,value:Math.round(symSwap[s]*100)/100};}).sort(function(a,b){return a.value-b.value;});
+  var symCount={},symVol={},symSwap={};data.forEach(function(t){symCount[t.symbol]=(symCount[t.symbol]||0)+1;symVol[t.symbol]=(symVol[t.symbol]||0)+(t.volume||0);symSwap[t.symbol]=(symSwap[t.symbol]||0)+(t.swap||0);});SYM_BAR_DATA=Object.keys(symCount).map(function(s){return{name:s,count:symCount[s],volume:Math.round(symVol[s]*100)/100};}).sort(function(a,b){return b.count-a.count;});SWAP_DATA=Object.keys(symSwap).map(function(s){return{name:s,value:Math.round(symSwap[s]*100)/100};}).sort(function(a,b){return a.value-b.value;});
   initAllCharts();
 }
 function updateSummaryLine(total,wins,pl){
