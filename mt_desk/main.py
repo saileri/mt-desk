@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MT Desk v6 — Long-term trading habit analysis (6 charts)."""
+"""MT Desk v6.1 — Long-term trading habit analysis (6 charts)."""
 import json,io,os,sys,tempfile,tkinter as tk,threading,webbrowser
 from tkinter import filedialog,messagebox
 from datetime import datetime
@@ -50,7 +50,7 @@ def build_dashboard_html(account,trades,stats):
     <div class="summary-sub">累計隔夜利息</div>
   </div>
 </div>'''
-    # ── v6: 6 long-term habit analysis charts ──
+    # ── v6.1: 6 long-term habit analysis charts ──
     # 1. Monthly P&L bar
     monthly=sorted(stats["monthly"].items());m_labels=[m[0] for m in monthly];m_data=[round(m[1],2) for m in monthly]
     monthly_pl_json=_j({"labels":m_labels,"data":m_data})
@@ -95,7 +95,7 @@ def build_dashboard_html(account,trades,stats):
     html=html.replace("{SUMMARY}",summary_html).replace("{TRADE_JSON}",trade_json)
     html=html.replace("{ECHART_CDN}",ECHARTS_CDN).replace("{SYM_PIE_DATA}",sym_pie_json)
     html=html.replace("{DATE_MIN}",date_min).replace("{DATE_MAX}",date_max)
-    # v6 chart JSON
+    # v6.1 chart JSON
     html=html.replace("{MONTHLY_PL_JSON}",monthly_pl_json)
     html=html.replace("{LS_MONTHLY_JSON}",ls_monthly_json)
     html=html.replace("{QUARTERLY_SYM_JSON}",quarterly_sym_json)
@@ -154,7 +154,7 @@ tr:hover td{background:var(--surface)}.win{color:var(--green)!important}.loss{co
 tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 @media(max-width:768px){.summary-row{grid-template-columns:1fr 1fr}.chart-grid{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(3,1fr)}}
 </style></head><body>
-<div class="header"><h1>MT Desk v6 — {ACCOUNT}</h1>
+<div class="header"><h1>MT Desk v6.1 — {ACCOUNT}</h1>
 <div style="display:flex;align-items:center;gap:12px">
   <div class="meta"><span id="headerCount">{COUNT}</span> 筆交易 · P/L: <b id="headerPL" style="color:{PL_COLOR}">{PL}</b> · 勝率: <b id="headerWR">{WR}</b></div>
   <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌓</button>
@@ -169,7 +169,7 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 </div>
 <div class="main"><div class="kpi-row" id="kpiRow">{CARDS}</div>
 {SUMMARY}
-<!-- ══════ v6: Long-Term Trading Habit Analysis ══════ -->
+<!-- ══════ v6.1: Long-Term Trading Habit Analysis ══════ -->
 <div class="section-title">📊 交易習慣分析</div>
 <div class="chart-grid">
   <div class="chart-box">
@@ -233,7 +233,7 @@ var ALL_TRADES={TRADE_JSON};
 var SYM_PIE_DATA={SYM_PIE_DATA};
 var data=ALL_TRADES.slice();
 
-// ── v6 chart data ──
+// ── v6.1 chart data ──
 var CHART_MONTHLY_PL={MONTHLY_PL_JSON};
 var CHART_LS_MONTHLY={LS_MONTHLY_JSON};
 var CHART_QUARTERLY_SYM={QUARTERLY_SYM_JSON};
@@ -427,9 +427,9 @@ def process_file(path):
     return result,len(trades)
 
 def main():
-    root=tk.Tk();root.title("MT Desk v6");root.geometry("400x260")
+    root=tk.Tk();root.title("MT Desk v6.1");root.geometry("400x260")
     root.configure(bg="#f0f2f5");root.resizable(False,False)
-    tk.Label(root,text="MT Desk v6",font=("Segoe UI",22,"bold"),fg="#2563eb",bg="#f0f2f5").pack(pady=(24,4))
+    tk.Label(root,text="MT Desk v6.1",font=("Segoe UI",22,"bold"),fg="#2563eb",bg="#f0f2f5").pack(pady=(24,4))
     tk.Label(root,text="6 張長期交易習慣分析圖表 · ECharts",font=("Segoe UI",10),fg="#6b7280",bg="#f0f2f5").pack(pady=(0,20))
     status_var=tk.StringVar(value="選擇 HTML 報表檔案")
     status=tk.Label(root,textvariable=status_var,font=("Segoe UI",9),fg="#6b7280",bg="#f0f2f5");status.pack(pady=(0,14))
