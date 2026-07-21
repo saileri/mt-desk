@@ -15,18 +15,22 @@ def _j(obj): return json.dumps(obj, ensure_ascii=False, default=str)
 
 def build_dashboard_html(account,trades,stats):
     avg_w=stats["avg_win"];avg_l=abs(stats["avg_loss"]);plr=avg_w/avg_l if avg_l>0 else 0
+    wr_val=stats["wr"];wr_c="--green" if wr_val>=50 else"--muted" if wr_val>=30 else"--red"
+    pf_val=stats["pf"];pf_c="--red" if pf_val<1 else"--muted" if pf_val<2 else"--green"
     cards=[
         ("總交易",str(stats["count"]),"總交易筆數",""),
         ("總盈虧",f"${stats['total_pl']:+,.2f}","所有交易的淨盈虧金額總和","--green" if stats["total_pl"]>=0 else"--red"),
-        ("獲利佔比",f"{stats['wr']:.0f}%","盈利交易數 ÷ 總交易數 × 100%","--green"),
+        ("獲利佔比",f"{wr_val:.0f}%","盈利交易數 ÷ 總交易數 × 100%",wr_c),
         ("平均盈利",f"+${avg_w:,.2f}","盈利交易的平均獲利金額","--green"),
         ("平均虧損",f"-${avg_l:,.2f}","虧損交易的平均損失金額","--red"),
         ("盈虧比",f"{plr:.2f}","平均盈利 ÷ 平均虧損，<1 表示每賺 1 元要賠更多元，即使獲利佔比高也會虧損","--muted" if plr<1 else"--green"),
-        ("盈利因子",f"{stats['pf']:.2f}" if stats["pf"]!=float("inf") else"∞","總盈利 ÷ 總虧損絕對值，<1 代表虧損策略","--muted"),
+        ("盈利因子",f"{pf_val:.2f}" if pf_val!=float("inf") else"∞","總盈利 ÷ 總虧損絕對值，<1 代表虧損策略",pf_c),
         ("最大回撤",f"${stats['max_dd']:,.2f}","權益曲線從最高點到最低點的最大跌幅","--red"),
         ("夏普比率",f"{stats['sharpe']:.2f}","風險調整後報酬，<0 表示平均每日回報為負","--muted"),
         ("最佳",f"+${stats['best']:,.2f}","單筆最大盈利","--green"),
         ("最差",f"-${abs(stats['worst']):,.2f}","單筆最大虧損","--red"),
+        ("最長連續盈利",f"{stats['max_win_streak']}筆","按時間順序連續盈利的最長筆數（非全部連續）","--muted"),
+        ("最長連續虧損",f"{stats['max_loss_streak']}筆","按時間順序連續虧損的最長筆數（非全部連續）","--muted"),
     ]
     card_html="".join(f'<div class="kpi has-tip"><span class="lbl">{l}</span><span class="val" style="color:var({c})">{v}</span><span class="tip">{tip}</span></div>' for l,v,tip,c in cards)
     # ── Summary top section ──
@@ -36,7 +40,7 @@ def build_dashboard_html(account,trades,stats):
     swap_color="#00e676" if total_swap_val>=0 else"#ff5252"
     summary_html=f'''<div class="summary-row">
   <div class="summary-card" style="grid-column:span 2">
-    <div class="summary-title">品種偏好（交易次數佔比）</div>
+    <div class="summary-title">品種偏好（交易次數佔比）<span style="font-size:10px;color:var(--muted);font-weight:400"> 💡 點擊品種可篩選明細</span></div>
     <div id="chart-symbol-pie" style="width:100%;height:300px"></div>
   </div>
   <div class="summary-card">
@@ -137,6 +141,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(8px,0.8vw,12px);margin-bottom:16px}
 .chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:10px 12px 4px}
 .chart-box .axis-hint{font-size:9px;color:var(--muted);text-align:right;margin-top:-6px;margin-bottom:2px;padding-right:4px}
+#chart-symbol-pie{cursor:pointer}
 .chart-tag{display:inline-block;font-size:9px;padding:1px 6px;border-radius:3px;margin-right:4px;vertical-align:middle;font-weight:500}
 .chart-tag.x{background:var(--muted);color:var(--bg);opacity:.7}.chart-tag.y{background:var(--blue);color:#fff;opacity:.7}
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
@@ -156,8 +161,9 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 .summary-line b{color:var(--blue)}.summary-line .pos{color:var(--green)}.summary-line .neg{color:var(--red)}
 .quick-btn{padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--muted);cursor:pointer;font-size:clamp(9px,0.7vw,11px);font-family:inherit}.quick-btn:hover{border-color:var(--blue);color:var(--text)}.quick-btn.active{border-color:var(--blue);color:var(--blue);background:rgba(68,138,255,0.1)}
 @media(max-width:768px){.summary-row{grid-template-columns:1fr 1fr}.chart-grid{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(3,1fr)}}
+@media print{@page{margin:12mm}.header,.date-bar,.toolbar,.theme-btn,.metric-guide{display:none!important}.chart-box{break-inside:avoid;page-break-inside:avoid}.table-wrap{overflow-x:visible}body{font-size:10pt;background:#fff!important;color:#000!important}.kpi{border:1px solid #ccc!important;background:#fff!important;box-shadow:none}.kpi .val{font-size:14pt}.kpi .lbl,.kpi .tip{color:#666!important}.chart-grid{grid-template-columns:1fr}.section-title{color:#000!important;border-bottom:1px solid #999}.summary-line{background:#f5f5f5!important;border:1px solid #ccc}}
 </style></head><body>
-<div class="header"><h1>MT Desk v6.1 — {ACCOUNT}</h1>
+<div class="header"><h1>MT Desk v6.2 — {ACCOUNT}</h1>
 <div style="display:flex;align-items:center;gap:12px">
   <div class="meta"><span id="headerCount">{COUNT}</span> 筆交易 · P/L: <b id="headerPL" style="color:{PL_COLOR}">{PL}</b> · 獲利佔比: <b id="headerWR">{WR}</b></div>
   <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌓</button>
@@ -184,11 +190,11 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 <div class="chart-grid">
   <div class="chart-box">
     <span class="chart-tag x">X：月份</span><span class="chart-tag y">Y：$ USD</span>
-    <div id="chart-monthly-pl" style="width:100%;height:280px"></div>
+    <div id="chart-monthly-pl" style="width:100%;height:300px"></div>
   </div>
   <div class="chart-box">
     <span class="chart-tag x">X：月份</span><span class="chart-tag y">Y：筆數</span>
-    <div id="chart-ls-monthly" style="width:100%;height:280px"></div>
+    <div id="chart-ls-monthly" style="width:100%;height:300px"></div>
   </div>
   <div class="chart-box">
     <span class="chart-tag x">X：季度</span><span class="chart-tag y">Y：筆數</span>
@@ -200,16 +206,16 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
   </div>
   <div class="chart-box">
     <span class="chart-tag x">X：日期</span><span class="chart-tag y">Y：$ USD 累計</span>
-    <div id="chart-equity" style="width:100%;height:280px"></div>
+    <div id="chart-equity" style="width:100%;height:300px"></div>
   </div>
   <div class="chart-box">
     <span class="chart-tag x">X：交易時段</span><span class="chart-tag y">Y：筆數</span>
-    <div id="chart-session" style="width:100%;height:280px"></div>
+    <div id="chart-session" style="width:100%;height:300px"></div>
   </div>
 </div>
 <!-- ══════ Trade Table ══════ -->
 <div class="section-title">逐筆明細</div>
-<div class="toolbar"><input type="text" id="searchBox" placeholder="搜尋 Ticket..." oninput="doSearch()">
+<div class="toolbar"><input type="text" id="searchBox" placeholder="搜尋 Ticket / 品種 / 日期..." oninput="doSearch()">
 <span id="searchInfo" style="font-size:clamp(10px,0.8vw,13px);color:var(--muted)"></span><span style="flex:1"></span>
 <span class="page-info">每頁</span><select id="pageSize" onchange="pageSize=+this.value;currentPage=1;renderTable()">
 <option value="15" selected>15</option><option value="30">30</option><option value="50">50</option><option value="100">100</option></select><span class="page-info">筆</span>
@@ -255,9 +261,6 @@ var CHART_SESSION={SESSION_JSON};
 window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(e){if(!localStorage.getItem('mt-theme')){document.documentElement.setAttribute('data-theme',e.matches?'dark':'light');initAllCharts();}});
 function toggleTheme(){var c=document.documentElement.getAttribute('data-theme');var n=c==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('mt-theme',n);initAllCharts();}
 
-// ── ECharts color palette ──
-var C10=['#5470c6','#91cc75','#fac858','#ee6666','#73c0de','#3ba272','#fc8452','#9a60b4','#ea7ccc','#48b8d0'];
-
 function ecOpt(o,isDark){
   if(isDark)echarts.registerTheme('mt-dark',{});
   var el=document.getElementById(o.id);
@@ -269,6 +272,7 @@ function ecOpt(o,isDark){
 function initAllCharts(){
   var isDark=document.documentElement.getAttribute('data-theme')==='dark';
   var tc=isDark?'#e2e8f0':'#1f2937';
+  var C10=isDark?['#448aff','#69f0ae','#ffd740','#ff5252','#40c4ff','#b2ff59','#ff6e40','#b388ff','#ff80ab','#84ffff']:['#2563eb','#059669','#f59e0b','#dc2626','#0284c7','#16a34a','#ea580c','#7c3aed','#db2777','#0891b2'];
   // 0. Symbol pie
   ecOpt({id:'chart-symbol-pie',opt:{
     tooltip:{trigger:'item',formatter:'{b}: {c} 筆 ({d}%)'},legend:{bottom:0,textStyle:{color:tc,fontSize:10}},color:C10,
@@ -377,12 +381,15 @@ function updateKPIs(){
   // Sharpe (simplified daily)
   var daily={};data.forEach(function(t){var d=t.open?t.open.substring(0,10):'';if(d)daily[d]=(daily[d]||0)+t.profit;});
   var dv=Object.values(daily),sharpe=0;if(dv.length>1){var mean=dv.reduce(function(a,b){return a+b;},0)/dv.length;var variance=dv.reduce(function(a,b){return a+Math.pow(b-mean,2);},0)/dv.length;var std=Math.sqrt(variance);if(std>0)sharpe=mean/std*Math.sqrt(252);}
+  // Streaks
+  var maxWS=0,maxLS=0,curW=0,curL=0;
+  sorted.forEach(function(t){if(t.profit>0){curW++;curL=0;if(curW>maxWS)maxWS=curW;}else{curL++;curW=0;if(curL>maxLS)maxLS=curL;}});
   document.getElementById('headerCount').textContent=total;
   document.getElementById('headerPL').textContent='$'+(pl>=0?'+':'')+pl.toFixed(2);
   document.getElementById('headerWR').textContent=(total?(wins/total*100).toFixed(0):0)+'%';
   var vals=[total,'$'+(pl>=0?'+':'')+pl.toFixed(2),(total?(wins/total*100).toFixed(0):0)+'%',
     '+$'+avgW.toFixed(2),'-$'+avgL.toFixed(2),plr.toFixed(2),pf.toFixed(2),
-    '$'+maxdd.toFixed(2),(sharpe||0).toFixed(2),'$'+(best!==-Infinity?'+':'')+best.toFixed(2),'$-'+Math.abs(worst).toFixed(2)];
+    '$'+maxdd.toFixed(2),(sharpe||0).toFixed(2),'$'+(best!==-Infinity?'+':'')+best.toFixed(2),'$-'+Math.abs(worst).toFixed(2),maxWS+'筆',maxLS+'筆'];
   var kpiVals=document.querySelectorAll('.kpi .val');
   for(var i=0;i<Math.min(vals.length,kpiVals.length);i++){kpiVals[i].textContent=vals[i];}
   // Summary line
@@ -441,7 +448,7 @@ function filterBySymbol(sym){
 }
 var sortCol='profit',sortDir=-1;var currentPage=1,pageSize=15,totalPages=1;var searchIdx=-1,searchMatches=[];
 function sortBy(col){if(sortCol===col)sortDir*=-1;else{sortCol=col;sortDir=-1;}data.sort(function(a,b){var va=a[col],vb=b[col];if(typeof va==='number')return(va-vb)*sortDir;return String(va).localeCompare(String(vb))*sortDir;});currentPage=1;renderTable();document.querySelectorAll('.sort-arrow').forEach(function(el){el.textContent='';});var arrow=document.getElementById('sa-'+col);if(arrow)arrow.textContent=sortDir>0?'▲':'▼';}
-function doSearch(){var q=document.getElementById('searchBox').value.trim().toLowerCase();searchMatches=[];searchIdx=-1;if(!q){data=applyCurrentFilter();document.getElementById('searchInfo').textContent='';}else{data=applyCurrentFilter().filter(function(t){return String(t.ticket).toLowerCase().indexOf(q)>=0;});document.getElementById('searchInfo').textContent=data.length+' 條匹配';ALL_TRADES.forEach(function(t,i){if(String(t.ticket).toLowerCase().indexOf(q)>=0)searchMatches.push(i);});}currentPage=1;renderTable();}
+function doSearch(){var q=document.getElementById('searchBox').value.trim().toLowerCase();searchMatches=[];searchIdx=-1;if(!q){data=applyCurrentFilter();document.getElementById('searchInfo').textContent='';}else{data=applyCurrentFilter().filter(function(t){return String(t.ticket).toLowerCase().indexOf(q)>=0||String(t.symbol).toLowerCase().indexOf(q)>=0||String(t.open_date).indexOf(q)>=0;});document.getElementById('searchInfo').textContent=data.length+' 條匹配';ALL_TRADES.forEach(function(t,i){if(String(t.ticket).toLowerCase().indexOf(q)>=0||String(t.symbol).toLowerCase().indexOf(q)>=0||String(t.open_date).indexOf(q)>=0)searchMatches.push(i);});}currentPage=1;renderTable();}
 function applyCurrentFilter(){var df=document.getElementById('dateFrom').value;var dt=document.getElementById('dateTo').value;if(!df&&!dt)return ALL_TRADES.slice();return ALL_TRADES.filter(function(t){if(df&&t.open_date<df)return false;if(dt&&t.open_date>dt)return false;return true;});}
 document.getElementById('searchBox').addEventListener('keydown',function(e){if(e.key==='Enter'&&searchMatches.length>0){e.preventDefault();searchIdx=(searchIdx+1)%searchMatches.length;var gi=searchMatches[searchIdx];currentPage=Math.floor(gi/pageSize)+1;renderTable();setTimeout(function(){var rows=document.querySelectorAll('#tradeBody tr');rows.forEach(function(r){r.classList.remove('highlight');});var li=gi%pageSize;if(rows[li]){rows[li].classList.add('highlight');rows[li].scrollIntoView({behavior:'smooth',block:'center'});}document.getElementById('searchInfo').textContent=(searchIdx+1)+'/'+searchMatches.length+' 條匹配';},30);}});
 function renderTable(){totalPages=Math.ceil(data.length/pageSize)||1;if(currentPage>totalPages)currentPage=totalPages;var start=(currentPage-1)*pageSize;var page=data.slice(start,start+pageSize);var h='';page.forEach(function(t){var cls=t.profit>0?'win':'loss';h+='<tr class=\"'+cls+'\"><td>'+t.ticket+'</td><td>'+t.open+'</td><td>'+t.type+'</td><td>'+t.volume+'</td><td>'+t.symbol+'</td><td>'+(t.open_price||'-')+'</td><td>'+(t.sl||'-')+'</td><td>'+(t.tp||'-')+'</td><td>'+t.close+'</td><td>'+(t.close_price||'-')+'</td><td>$'+(t.commission||0).toFixed(2)+'</td><td>$'+(t.swap||0).toFixed(2)+'</td><td class=\"'+cls+'\">$'+t.profit.toFixed(2)+'</td></tr>';});document.getElementById('tradeBody').innerHTML=h;var info=currentPage+'/'+totalPages+' ('+data.length+'筆)';document.getElementById('pageInfo').textContent=info;document.getElementById('pageInfo2').textContent=info;}
@@ -460,6 +467,7 @@ renderTable();document.getElementById('sa-profit').textContent='▼';updateSumma
 <p><b>最大回撤</b>：權益曲線從歷史最高點到之後最低點的跌幅（美元）。衡量最壞情況下虧了多少。公式：max(0, max(peak − equity))。</p>
 <p><b>夏普比率</b>：風險調整後報酬 = 日均盈虧均值 ÷ 日均盈虧標準差 × √252。<b style="color:var(--red)">&lt;0</b> 表示平均每日回報為負。</p>
 <p><b>最佳／最差</b>：單筆交易的最大盈利與最大虧損金額。</p>
+<p><b>最長連續盈利／連續虧損</b>：按開倉時間排序後，profit > 0（或 ≤0）連續出現的最長筆數。</p>
 </div></details></div>
 </body></html>"""
 
@@ -474,9 +482,9 @@ def process_file(path):
     return result,len(trades)
 
 def main():
-    root=tk.Tk();root.title("MT Desk v6.1");root.geometry("400x260")
+    root=tk.Tk();root.title("MT Desk v6.2");root.geometry("400x260")
     root.configure(bg="#f0f2f5");root.resizable(False,False)
-    tk.Label(root,text="MT Desk v6.1",font=("Segoe UI",22,"bold"),fg="#2563eb",bg="#f0f2f5").pack(pady=(24,4))
+    tk.Label(root,text="MT Desk v6.2",font=("Segoe UI",22,"bold"),fg="#2563eb",bg="#f0f2f5").pack(pady=(24,4))
     tk.Label(root,text="6 張長期交易習慣分析圖表 · ECharts",font=("Segoe UI",10),fg="#6b7280",bg="#f0f2f5").pack(pady=(0,20))
     status_var=tk.StringVar(value="選擇 HTML 報表檔案")
     status=tk.Label(root,textvariable=status_var,font=("Segoe UI",9),fg="#6b7280",bg="#f0f2f5");status.pack(pady=(0,14))

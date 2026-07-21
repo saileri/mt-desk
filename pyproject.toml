@@ -1,6 +1,6 @@
 [project]
 name = "mt-desk"
-version = "6.1.0"
+version = "6.2.0"
 description = "MT4/MT5 Trading Analytics Desktop — Multi-account comparison dashboard"
 readme = "README.md"
 requires-python = ">=3.11"
