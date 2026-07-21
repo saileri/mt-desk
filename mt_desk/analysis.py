@@ -27,14 +27,22 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
     best = max(t["profit"] for t in trades)
     worst = min(t["profit"] for t in trades)
 
-    # Equity curve
+    # Equity curve — daily aggregation to avoid duplicate dates on x-axis
     sorted_trades = sorted(trades, key=lambda x: x["open_time"] or datetime.min)
     cum = 0.0
     equity = []; equity_dates = []
+    last_date = None
     for t in sorted_trades:
         cum += t["profit"]
+        d = t["open_time"].strftime("%Y-%m-%d") if t["open_time"] else ""
+        if d != last_date and last_date is not None:
+            equity.append(round(cum - t["profit"], 2))
+            equity_dates.append(last_date)
+        last_date = d
+    # Append final point
+    if last_date is not None:
         equity.append(round(cum, 2))
-        equity_dates.append(t["open_time"].strftime("%Y-%m-%d") if t["open_time"] else "")
+        equity_dates.append(last_date)
 
     # Max drawdown
     peak = 0.0
@@ -158,7 +166,7 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
             quarterly_sym.setdefault(q, defaultdict(int))
             quarterly_sym[q][t["symbol"].upper()] += 1
     # Session preference (0-7 Asia / 8-15 London / 16-23 NY)
-    session: dict[str, dict[str, float]] = {"亞洲盤 00~07": {"cnt": 0, "pl": 0.0}, "倫敦盤 08~15": {"cnt": 0, "pl": 0.0}, "紐約盤 16~23": {"cnt": 0, "pl": 0.0}}
+    session: dict[str, dict[str, float]] = {"亞洲盤 00~07": {"cnt": 0, "pl": 0.0, "wins": 0}, "倫敦盤 08~15": {"cnt": 0, "pl": 0.0, "wins": 0}, "紐約盤 16~23": {"cnt": 0, "pl": 0.0, "wins": 0}}
     for t in trades:
         if t["open_time"]:
             h = t["open_time"].hour
@@ -167,6 +175,8 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
             else: s = "紐約盤 16~23"
             session[s]["cnt"] += 1
             session[s]["pl"] += t["profit"]
+            if t["profit"] > 0:
+                session[s]["wins"] += 1
 
     return {
         "count": len(trades),

@@ -73,7 +73,7 @@ def build_dashboard_html(account,trades,stats):
     duration_json=_j({"labels":dur_keys,"data":dur_vals})
     # 6. Session preference
     ses=stats["session"];ses_labels=list(ses.keys());ses_cnt=[ses[k]["cnt"] for k in ses_labels]
-    ses_wr=[round(ses[k]["pl"]/ses[k]["cnt"],0) if ses[k]["cnt"]>0 else 0 for k in ses_labels]
+    ses_wr=[round(ses[k]["wins"]/ses[k]["cnt"]*100,0) if ses[k]["cnt"]>0 else 0 for k in ses_labels]
     session_json=_j({"labels":ses_labels,"cnt":ses_cnt,"wr":ses_wr})
 
     # All trades as JSON
@@ -343,13 +343,13 @@ function applyDateFilter(){
   var dt=document.getElementById('dateTo').value;
   if(!df&&!dt){resetDateFilter();return;}
   data=ALL_TRADES.filter(function(t){if(df&&t.open_date<df)return false;if(dt&&t.open_date>dt)return false;return true;});
-  updateKPIs();currentPage=1;renderTable();
+  updateKPIs();currentPage=1;renderTable();updateChartsFromFilter();
   document.getElementById('filterInfo').textContent=' ('+data.length+' 筆)';
 }
 function resetDateFilter(){
   document.getElementById('dateFrom').value='{DATE_MIN}';
   document.getElementById('dateTo').value='{DATE_MAX}';
-  data=ALL_TRADES.slice();updateKPIs();currentPage=1;renderTable();
+  data=ALL_TRADES.slice();updateKPIs();currentPage=1;renderTable();updateChartsFromFilter();
   document.getElementById('filterInfo').textContent='';
 }
 function updateKPIs(){
@@ -366,6 +366,31 @@ function updateKPIs(){
     'N/A','N/A','$'+(best!==-Infinity?'+':'')+best.toFixed(2),'$-'+Math.abs(worst).toFixed(2)];
   var kpiVals=document.querySelectorAll('.kpi .val');
   for(var i=0;i<Math.min(vals.length,kpiVals.length);i++){kpiVals[i].textContent=vals[i];}
+}
+function updateChartsFromFilter(){
+  // Recompute chart data from filtered `data` array
+  var monthly={},ls_monthly={},quarterly_sym={},dur_buckets={"<1h":0,"1~4h":0,"4~24h":0,"1~3天":0,"3~7天":0,"1~4週":0,">1月":0},session={"亞洲盤 00~07":{cnt:0,pl:0,wins:0},"倫敦盤 08~15":{cnt:0,pl:0,wins:0},"紐約盤 16~23":{cnt:0,pl:0,wins:0}};
+  var eq=[],eqDates=[],cum=0;
+  var sorted=data.slice().sort(function(a,b){return a.open<b.open?-1:1;});
+  sorted.forEach(function(t){
+    cum+=t.profit;eq.push(Math.round(cum*100)/100);eqDates.push(t.open_date);
+    var m=t.open?t.open.substring(0,7):'';
+    if(m){monthly[m]=(monthly[m]||0)+t.profit;}
+    if(m){if(!ls_monthly[m])ls_monthly[m]={long:0,short:0};if(t.type==='BUY')ls_monthly[m].long++;else ls_monthly[m].short++;}
+    if(t.open){var yr=t.open.substring(0,4);var mo=parseInt(t.open.substring(5,7));var q=yr+'-Q'+Math.ceil(mo/3);if(!quarterly_sym[q])quarterly_sym[q]={};var s=t.symbol;quarterly_sym[q][s]=(quarterly_sym[q][s]||0)+1;}
+    if(t.open&&t.close){var durH=(new Date(t.close)-new Date(t.open))/3600000;if(durH<1)dur_buckets['<1h']++;else if(durH<4)dur_buckets['1~4h']++;else if(durH<24)dur_buckets['4~24h']++;else if(durH<72)dur_buckets['1~3天']++;else if(durH<168)dur_buckets['3~7天']++;else if(durH<672)dur_buckets['1~4週']++;else dur_buckets['>1月']++;}
+    if(t.open){var h=parseInt(t.open.substring(11,13));var sk=h<8?'亞洲盤 00~07':h<16?'倫敦盤 08~15':'紐約盤 16~23';session[sk].cnt++;session[sk].pl+=t.profit;if(t.profit>0)session[sk].wins++;}
+  });
+  // Update chart globals
+  var mLabels=Object.keys(monthly).sort();CHART_MONTHLY_PL={labels:mLabels,data:mLabels.map(function(k){return Math.round(monthly[k]*100)/100;})};
+  var lsLabels=Object.keys(ls_monthly).sort();CHART_LS_MONTHLY={labels:lsLabels,long:lsLabels.map(function(k){return ls_monthly[k].long;}),short:lsLabels.map(function(k){return ls_monthly[k].short;})};
+  var qsLabels=Object.keys(quarterly_sym).sort();var allSyms={};qsLabels.forEach(function(q){Object.keys(quarterly_sym[q]).forEach(function(s){allSyms[s]=(allSyms[s]||0)+quarterly_sym[q][s];});});var topSyms=Object.keys(allSyms).sort(function(a,b){return allSyms[b]-allSyms[a];}).slice(0,6);CHART_QUARTERLY_SYM={labels:qsLabels,series:topSyms.map(function(s){return{name:s,data:qsLabels.map(function(q){return quarterly_sym[q][s]||0;})};})};
+  CHART_EQUITY={dates:eqDates,equity:eq,pl:cum};
+  CHART_DURATION={labels:Object.keys(dur_buckets),data:Object.values(dur_buckets)};
+  var sesLabels=Object.keys(session);CHART_SESSION={labels:sesLabels,cnt:sesLabels.map(function(k){return session[k].cnt;}),wr:sesLabels.map(function(k){return session[k].cnt>0?Math.round(session[k].wins/session[k].cnt*100):0;})};
+  // Update symbol pie
+  var symCount={};data.forEach(function(t){symCount[t.symbol]=(symCount[t.symbol]||0)+1;});SYM_PIE_DATA=Object.keys(symCount).map(function(s){return{name:s,value:symCount[s]};});
+  initAllCharts();
 }
 var sortCol='profit',sortDir=-1;var currentPage=1,pageSize=15,totalPages=1;var searchIdx=-1,searchMatches=[];
 function sortBy(col){if(sortCol===col)sortDir*=-1;else{sortCol=col;sortDir=-1;}data.sort(function(a,b){var va=a[col],vb=b[col];if(typeof va==='number')return(va-vb)*sortDir;return String(va).localeCompare(String(vb))*sortDir;});currentPage=1;renderTable();document.querySelectorAll('.sort-arrow').forEach(function(el){el.textContent='';});var arrow=document.getElementById('sa-'+col);if(arrow)arrow.textContent=sortDir>0?'▲':'▼';}
@@ -411,12 +436,15 @@ def main():
     def open_file():
         paths=filedialog.askopenfilenames(title="選擇 MT4/MT5 報表",filetypes=[("HTML","*.htm *.html")])
         if not paths:return
-        total=len(paths)
-        for i,path in enumerate(paths,1):
-            fname=Path(path).name;status_var.set(f"⏳ ({i}/{total}): {fname}");root.update()
-            try:process_file(path)
-            except Exception as e:messagebox.showerror("錯誤",str(e))
-        status_var.set(f"✅ 完成 — {total} 個檔案")
+        def worker():
+            total=len(paths)
+            for i,path in enumerate(paths,1):
+                fname=Path(path).name
+                root.after(0,lambda f=fname,i=i,t=total:status_var.set(f"⏳ ({i}/{t}): {f}"))
+                try:process_file(path)
+                except Exception as e:root.after(0,lambda err=str(e):messagebox.showerror("錯誤",err))
+            root.after(0,lambda t=total:status_var.set(f"✅ 完成 — {t} 個檔案"))
+        threading.Thread(target=worker,daemon=True).start()
     tk.Button(root,text="📂 選擇 MT4/MT5 HTML 報表",font=("Segoe UI",12),bg="#2563eb",fg="white",
         relief="flat",padx=24,pady=10,command=open_file,cursor="hand2").pack()
     root.mainloop()
