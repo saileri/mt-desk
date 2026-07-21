@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MT Desk v7.2 — Insight-driven trading dashboard with advanced charts."""
+"""MT Desk v7.1 — Insight-driven trading dashboard with advanced charts."""
 import json, io, os, sys, tempfile, tkinter as tk, threading, webbrowser
 from tkinter import filedialog, messagebox
 from datetime import datetime
@@ -19,11 +19,9 @@ def _fmt_hours(h):
     if h < 1:
         return f"{int(h * 60)}分鐘"
     if h < 24:
-        s = f"{h:.1f}".rstrip("0").rstrip(".")
-        return f"{s}小時"
+        return f"{h:.1f}小時".rstrip("0").rstrip(".") + "小時"
     d = h / 24
-    s = f"{d:.1f}".rstrip("0").rstrip(".")
-    return f"{s}天"
+    return f"{d:.1f}天".rstrip("0").rstrip(".") + "天"
 
 
 def build_dashboard_html(account, trades, stats):
@@ -34,28 +32,22 @@ def build_dashboard_html(account, trades, stats):
     wr_c = "--green" if wr_val >= 50 else "--muted" if wr_val >= 30 else "--red"
     pf_val = stats["pf"]
     pf_c = "--red" if pf_val < 1 else "--muted" if pf_val < 2 else "--green"
-    core_cards = [
-        ("總淨盈利", f"${stats['total_pl']:+,.2f}", "所有交易的淨盈虧金額總和", "--green" if stats["total_pl"] >= 0 else "--red"),
-        ("獲利佔比", f"{wr_val:.0f}%", "盈利交易數 ÷ 總交易數 × 100%", wr_c),
-        ("盈虧比", f"{plr:.2f}", "平均盈利 ÷ 平均虧損，≥1 表示賺多賠少", "--green" if plr >= 1 else "--red"),
-        ("最大回撤", f"${stats['max_dd']:,.2f}", "權益曲線從最高點到最低點的最大跌幅", "--red" if stats['max_dd'] > abs(stats['total_pl'])*0.5 else "--muted"),
-    ]
-    core_html = "".join(
-        f'<div class="kpi kpi-core has-tip"><span class="lbl">{l}</span><span class="val" style="color:var({c})">{v}</span><span class="tip">{tip}</span></div>'
-        for l, v, tip, c in core_cards
-    )
-    sec_cards = [
+    cards = [
         ("總交易", str(stats["count"]), "總交易筆數", ""),
+        ("總盈虧", f"${stats['total_pl']:+,.2f}", "所有交易的淨盈虧金額總和", "--green" if stats["total_pl"] >= 0 else "--red"),
+        ("獲利佔比", f"{wr_val:.0f}%", "盈利交易數 ÷ 總交易數 × 100%", wr_c),
         ("平均盈利", f"+${avg_w:,.2f}", "盈利交易的平均獲利金額", "--green"),
         ("平均虧損", f"-${avg_l:,.2f}", "虧損交易的平均損失金額", "--red"),
-        ("盈利因子", f"{pf_val:.2f}" if pf_val != float("inf") else "∞", "總盈利 ÷ 總虧損，<1 代表虧損策略", pf_c),
-        ("夏普比率", f"{stats['sharpe']:.2f}", "風險調整後報酬，<0 為負報酬", "--muted" if stats['sharpe'] < 0 else ""),
+        ("盈虧比", f"{plr:.2f}", "平均盈利 ÷ 平均虧損，<1 表示每賺 1 元要賠更多元", "--muted" if plr < 1 else "--green"),
+        ("盈利因子", f"{pf_val:.2f}" if pf_val != float("inf") else "∞", "總盈利 ÷ 總虧損絕對值，<1 代表虧損策略", pf_c),
+        ("最大回撤", f"${stats['max_dd']:,.2f}", "權益曲線從最高點到最低點的最大跌幅", "--red"),
+        ("夏普比率", f"{stats['sharpe']:.2f}", "風險調整後報酬，<0 表示平均每日回報為負", "--muted"),
         ("最佳", f"+${stats['best']:,.2f}", "單筆最大盈利", "--green"),
         ("最差", f"-${abs(stats['worst']):,.2f}", "單筆最大虧損", "--red"),
     ]
-    sec_html = "".join(
-        f'<div class="kpi kpi-sec has-tip"><span class="lbl">{l}</span><span class="val" style="color:var({c})">{v}</span><span class="tip">{tip}</span></div>'
-        for l, v, tip, c in sec_cards
+    card_html = "".join(
+        f'<div class="kpi has-tip"><span class="lbl">{l}</span><span class="val" style="color:var({c})">{v}</span><span class="tip">{tip}</span></div>'
+        for l, v, tip, c in cards
     )
 
     # ── Top summary section ──
@@ -75,54 +67,28 @@ def build_dashboard_html(account, trades, stats):
     sym_pl_data = [{"name": s.upper(), "value": round(v, 2)} for s, v in stats["sym_pl"].items()]
     sym_pl_json = json.dumps(sorted(sym_pl_data, key=lambda x: x["value"]), ensure_ascii=False)
 
-    # Determine if pie should be collapsed (single symbol > 90%)
-    sym_count_items = sorted(stats["sym_count"].items(), key=lambda x: x[1], reverse=True)
-    top_sym = sym_count_items[0] if sym_count_items else None
-    top_pct = top_sym[1] / max(stats["count"], 1) * 100 if top_sym else 0
-    single_sym = top_pct > 90
-
-    # Determine date span for smart chart aggregation
-    open_dates = sorted(set(t["open_time"].strftime("%Y-%m-%d") for t in trades if t.get("open_time")))
-    date_span_days = 0
-    if len(open_dates) >= 2:
-        try:
-            from datetime import date as dt_date
-            d1 = dt_date.fromisoformat(open_dates[0])
-            d2 = dt_date.fromisoformat(open_dates[-1])
-            date_span_days = (d2 - d1).days
-        except: pass
-    # Granularity hint: < 7 days -> daily, < 60 days -> weekly, else monthly
-    if date_span_days <= 7: gran = "daily"
-    elif date_span_days <= 60: gran = "weekly"
-    else: gran = "monthly"
-
-    summary_html = f'''<div class="quick-insights" id="quickInsights">
-  <span class="qi-icon">💡</span>
-  <span class="qi-text" id="qiText"></span>
+    summary_html = f'''<div class="summary-row">
+  <div class="summary-card" style="grid-column:span 2">
+    <div class="summary-title">品種偏好（交易次數佔比）<span class="hint">點擊品種可篩選明細</span></div>
+    <div id="chart-symbol-pie" style="width:100%;height:300px"></div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-title">各品種盈虧貢獻</div>
+    <div id="chart-symbol-pl" style="width:100%;height:300px"></div>
+  </div>
 </div>
 <div class="summary-row compact">
   <div class="summary-card">
-    <div class="summary-title">品種盈虧貢獻</div>
-    <div id="chart-symbol-pl" style="width:100%;height:280px"></div>
-  </div>
-  <div class="summary-card" id="symbolPieBox">
-    <div class="summary-title">品種偏好</div>
-    <div id="chart-symbol-pie" style="width:100%;height:280px"></div>
-    <div id="symbolPieText" style="display:none;text-align:center;padding:20px;font-size:14px;color:var(--muted);line-height:1.6"></div>
-  </div>
-  <div class="summary-card">
-    <div class="summary-title">洞察</div>
-    <ul class="insight-list" id="insightList"></ul>
-  </div>
-</div>
-<div class="summary-row compact" style="grid-template-columns:1fr 1fr">
-  <div class="summary-card">
-    <div class="summary-title">交易量 <span class="hint">{total_volume_val:.2f} 手</span></div>
-    <div id="chart-volume-donut" style="width:100%;height:150px"></div>
+    <div class="summary-title">交易量佔比 <span class="hint">{total_volume_val:.2f} 手</span></div>
+    <div id="chart-volume-donut" style="width:100%;height:180px"></div>
   </div>
   <div class="summary-card">
     <div class="summary-title">Swap / 利息 <span class="hint" style="color:{swap_color}">${total_swap_val:+,.2f}</span></div>
-    <div id="chart-swap-bar" style="width:100%;height:150px"></div>
+    <div id="chart-swap-bar" style="width:100%;height:180px"></div>
+  </div>
+  <div class="summary-card wide" style="justify-content:flex-start">
+    <div class="summary-title">推薦洞察</div>
+    <ul class="insight-list" id="insightList"></ul>
   </div>
 </div>'''
 
@@ -270,7 +236,7 @@ def build_dashboard_html(account, trades, stats):
 
     html = _HTML.replace("{ACCOUNT}", account).replace("{COUNT}", str(stats["count"]))
     html = html.replace("{PL}", f"${stats['total_pl']:+,.2f}").replace("{PL_COLOR}", pl_color)
-    html = html.replace("{WR}", f"{stats['wr']:.0f}%").replace("{CORE_CARDS}", core_html).replace("{SEC_CARDS}", sec_html)
+    html = html.replace("{WR}", f"{stats['wr']:.0f}%").replace("{CARDS}", card_html)
     html = html.replace("{SUMMARY}", summary_html).replace("{TRADE_JSON}", trade_json)
     html = html.replace("{ECHART_CDN}", ECHARTS_CDN).replace("{SYM_PIE_DATA}", sym_pie_json)
     html = html.replace("{SYM_PL_JSON}", sym_pl_json)
@@ -286,7 +252,6 @@ def build_dashboard_html(account, trades, stats):
     html = html.replace("{SESSION_RADAR_JSON}", session_radar_json)
     html = html.replace("{SYM_BUBBLE_JSON}", sym_bubble_json)
     html = html.replace("{HEATMAP_JSON}", heatmap_json)
-    html = html.replace("{GRAN}", gran).replace("{DATE_SPAN}", str(date_span_days))
     return html
 
 
@@ -350,41 +315,10 @@ tr:hover td{background:var(--surface)}.win,.win td{color:var(--green)!important}
 tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
 .quick-btn{padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--muted);cursor:pointer;font-size:clamp(9px,0.7vw,11px);font-family:inherit}.quick-btn:hover{border-color:var(--blue);color:var(--text)}.quick-btn.active{border-color:var(--blue);color:var(--blue);background:rgba(59,130,246,0.1)}
 @media(max-width:900px){.summary-row,.summary-row.compact{grid-template-columns:1fr 1fr}.chart-grid{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:600px){.summary-row,.summary-row.compact{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(2,1fr)}.equity-section .chart-box-full{padding:10px}}
-.kpi-core-row{grid-template-columns:repeat(4,1fr);gap:clamp(10px,1vw,16px)}
-.kpi-core-row .kpi-core{padding:clamp(14px,1.2vw,20px)}
-.kpi-core-row .kpi-core .lbl{font-size:clamp(10px,0.8vw,12px);letter-spacing:.5px;text-transform:uppercase}
-.kpi-core-row .kpi-core .val{font-size:clamp(20px,2vw,30px);font-weight:800;margin-top:4px}
-.kpi-sec-row{grid-template-columns:repeat(auto-fill,minmax(clamp(90px,9vw,120px),1fr));gap:clamp(4px,0.4vw,8px);margin-bottom:clamp(10px,1vw,16px)}
-.kpi-sec-row .kpi-sec{padding:clamp(6px,0.5vw,10px)}
-.kpi-sec-row .kpi-sec .lbl{font-size:clamp(8px,0.6vw,10px);margin-bottom:2px}
-.kpi-sec-row .kpi-sec .val{font-size:clamp(13px,1.1vw,16px)}
-/* Equity section full width */
-.equity-section{margin-bottom:clamp(12px,1.2vw,20px)}
-.chart-box-full{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:14px 18px 8px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
-/* Quick insights bar */
-.quick-insights{display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,var(--surface),var(--card));border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;margin-bottom:12px;font-size:12px;color:var(--text)}
-.qi-icon{font-size:18px}
-.qi-text{line-height:1.5}
-/* Zebra table rows */
-#tradeBody tr:nth-child(even){background:rgba(127,127,127,0.04)}
-#tradeBody tr:nth-child(even):hover td{background:var(--surface)}
-/* Direction & profit badges */
-.dir-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-weight:700;font-size:10px}
-.dir-badge.buy{background:rgba(34,197,94,0.15);color:var(--green)}
-.dir-badge.sell{background:rgba(239,68,68,0.15);color:var(--red)}
-.pl-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-weight:600;font-size:10px}
-.pl-badge.win{background:rgba(34,197,94,0.12);color:var(--green)}
-.pl-badge.loss{background:rgba(239,68,68,0.12);color:var(--red)}
-/* Column toggle */
-.col-toggle{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--muted);cursor:pointer;padding:3px 8px;border:1px solid var(--border);border-radius:4px;background:var(--card);margin-left:6px}
-.col-toggle:hover{border-color:var(--blue)}
-.col-hidden{display:none!important}
-/* Volume formatting */
-.vol-num{font-family:'SF Mono','Fira Code',monospace;font-variant-numeric:tabular-nums}
-@media print{@page{margin:12mm}.header,.date-bar,.toolbar,.theme-btn,.metric-guide,.col-toggle{display:none!important}.chart-box{break-inside:avoid;page-break-inside:avoid}.table-wrap{overflow-x:visible}body{font-size:10pt;background:#fff!important;color:#000!important}.kpi{border:1px solid #ccc!important;background:#fff!important;box-shadow:none}.kpi .val{font-size:14pt}.kpi .lbl,.kpi .tip{color:#666!important}.chart-grid{grid-template-columns:1fr}.section-title{color:#000!important;border-bottom:1px solid #999}.summary-line{background:#f5f5f5!important;border:1px solid #ccc}.summary-card{background:#fff!important;border:1px solid #ccc}.equity-section{margin-bottom:16px}}
+@media(max-width:600px){.summary-row,.summary-row.compact{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(2,1fr)}}
+@media print{@page{margin:12mm}.header,.date-bar,.toolbar,.theme-btn,.metric-guide{display:none!important}.chart-box{break-inside:avoid;page-break-inside:avoid}.table-wrap{overflow-x:visible}body{font-size:10pt;background:#fff!important;color:#000!important}.kpi{border:1px solid #ccc!important;background:#fff!important;box-shadow:none}.kpi .val{font-size:14pt}.kpi .lbl,.kpi .tip{color:#666!important}.chart-grid{grid-template-columns:1fr}.section-title{color:#000!important;border-bottom:1px solid #999}.summary-line{background:#f5f5f5!important;border:1px solid #ccc}.summary-card{background:#fff!important;border:1px solid #ccc}}
 </style></head><body>
-<div class="header"><h1>MT Desk v7.2 <span>交易習慣分析報表</span></h1>
+<div class="header"><h1>MT Desk v7.1 <span>交易習慣分析報表</span></h1>
 <div style="display:flex;align-items:center;gap:12px">
   <div class="meta"><span id="headerCount">{COUNT}</span> 筆交易 · P/L: <b id="headerPL" style="color:{PL_COLOR}">{PL}</b> · 獲利佔比: <b id="headerWR">{WR}</b></div>
   <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌓</button>
@@ -406,14 +340,8 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
 </div>
 <div class="main">
 <div id="summaryLine" class="summary-line"></div>
-<div class="kpi-row kpi-core-row" id="kpiCore">{CORE_CARDS}</div>
-<div class="equity-section">
-  <div class="chart-box chart-box-full">
-    <div class="chart-head"><div class="chart-title">📈 權益曲線與最大回撤</div><div class="chart-sub" id="equitySub"></div></div>
-    <div id="chart-equity" style="width:100%;height:400px"></div>
-  </div>
-</div>
-<div class="kpi-row kpi-sec-row" id="kpiSec">{SEC_CARDS}</div>
+<div class="kpi-row" id="kpiRow">{CARDS}</div>
+{SUMMARY}
 <div class="section-title">📊 交易習慣分析</div>
 <div class="chart-grid">
   <div class="chart-box">
@@ -432,7 +360,10 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
     <div class="chart-head"><div class="chart-title">持倉時間分布</div><div class="chart-sub" id="durationSub"></div></div>
     <div id="chart-duration" style="width:100%;height:300px"></div>
   </div>
-
+  <div class="chart-box">
+    <div class="chart-head"><div class="chart-title">權益曲線與最大回撤</div><div class="chart-sub" id="equitySub"></div></div>
+    <div id="chart-equity" style="width:100%;height:300px"></div>
+  </div>
   <div class="chart-box">
     <div class="chart-head"><div class="chart-title">交易時段熱力圖</div><div class="chart-sub">星期 × 小時：顏色越深 = 筆數越多</div></div>
     <div id="chart-heatmap" style="width:100%;height:300px"></div>
@@ -446,7 +377,6 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
     <div id="chart-sym-bubble" style="width:100%;height:300px"></div>
   </div>
 </div>
-{SUMMARY}
 <div class="section-title">📋 逐筆明細</div>
 <div class="toolbar"><input type="text" id="searchBox" placeholder="搜尋 Ticket / 品種 / 日期..." oninput="doSearch()">
 <span id="searchInfo" style="font-size:clamp(10px,0.8vw,13px);color:var(--muted)"></span><span style="flex:1"></span>
@@ -492,8 +422,6 @@ var CHART_DURATION={DURATION_JSON};
 var CHART_HEATMAP={HEATMAP_JSON};
 var SESSION_RADAR={SESSION_RADAR_JSON};
 var SYM_BUBBLE={SYM_BUBBLE_JSON};
-var CHART_GRAN="{GRAN}";
-var DATE_SPAN={DATE_SPAN};
 
 (function(){var s=localStorage.getItem('mt-theme');var m=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',s||m);})();
 window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(e){if(!localStorage.getItem('mt-theme')){document.documentElement.setAttribute('data-theme',e.matches?'dark':'light');initAllCharts();}});
@@ -502,17 +430,8 @@ function toggleTheme(){var c=document.documentElement.getAttribute('data-theme')
 function ecOpt(o,isDark){
   var el=document.getElementById(o.id);
   if(!el)return;
-  try {
-    if(el._ec){try{el._ec.dispose();}catch(e){}}
-    el._ec=null;
-    // Clear any stale ECharts DOM
-    el.removeAttribute('_echarts_instance_');
-    var chart=echarts.init(el,isDark?'dark':null);
-    chart.setOption(o.opt);
-    el._ec=chart;
-  } catch(e) {
-    console.error('Chart init failed for '+o.id+': '+e.message);
-  }
+  if(el._ec)el._ec.dispose();
+  var chart=echarts.init(el,isDark?'dark':null);chart.setOption(o.opt);el._ec=chart;
 }
 
 function initAllCharts(){
@@ -753,44 +672,9 @@ window.addEventListener('resize',function(){
     var el=document.getElementById(id);if(el&&el._ec)el._ec.resize();
   });
 });
-initAllCharts();renderInsights();renderQuickInsights();
-// Single-symbol pie check
-(function(){
-  var total=SYM_PIE_DATA.reduce(function(a,b){return a+b.value;},0);
-  var top=SYM_PIE_DATA[0];
-  if(top&&top.value/total>0.9){
-    document.getElementById('chart-symbol-pie').style.display='none';
-    document.getElementById('symbolPieText').style.display='block';
-    document.getElementById('symbolPieText').innerHTML='主打品種：<b style="color:var(--blue);font-size:18px">'+top.name+'</b><br>佔比：<b>'+Math.round(top.value/total*100)+'%</b>（'+top.value+' 筆）';
-  }
-})();
-// Duration insight: if >90% in <1h, show text instead of chart
-(function(){
-  var dur=CHART_DURATION;
-  var b=dur.buckets||{};
-  var tot=Object.values(b).reduce(function(a,v){return a+v;},0)||1;
-  var pct=b['<1h']?Math.round(b['<1h']/tot*100):0;
-  if(pct>=90){
-    document.getElementById('chart-duration').style.display='none';
-    document.getElementById('durationSub').textContent='交易風格：超短線（'+pct+'% 訂單持倉小於1小時）';
-  }
-})();
+initAllCharts();renderInsights();
 
 function formatHours(h){if(h<1)return Math.round(h*60)+'分鐘';return Math.round(h*10)/10+'小時';}
-
-function renderQuickInsights(){
-  var el=document.getElementById('qiText');if(!el)return;
-  var total=data.length;
-  var pl=data.reduce(function(a,t){return a+t.profit;},0);
-  var wins=data.filter(function(t){return t.profit>0;}).length;
-  var wr=total?(wins/total*100).toFixed(1):0;
-  var under1h=data.filter(function(t){return t.duration_h!==null&&t.duration_h<1;}).length;
-  var durPct=total?Math.round(under1h/total*100):0;
-  var durText=durPct>=80?'，超短線交易（'+durPct+'% 持倉<1h）':'';
-  var buys=data.filter(function(t){return t.type==='BUY';}).length;
-  var dirText='做多 '+Math.round(buys/total*100)+'% / 做空 '+Math.round((total-buys)/total*100)+'%';
-  el.innerHTML='<b>'+total+'</b> 筆交易 · 淨盈虧 <b style="color:'+(pl>=0?'var(--green)':'var(--red)')+'">$'+(pl>=0?'+':'')+pl.toFixed(2)+'</b> · 獲利佔比 <b>'+wr+'%</b> · '+dirText+durText;
-}
 
 function renderInsights(){
   var list=document.getElementById('insightList');if(!list)return;
@@ -911,13 +795,12 @@ function quickFilter(period){
 function filterBySymbol(sym){
   document.getElementById('searchBox').value=sym;doSearch();
 }
-var sortCol='profit',sortDir=-1;var currentPage=1,pageSize=15,totalPages=1;var searchIdx=-1,searchMatches=[];var colsVisible=true;
-function toggleCols(){colsVisible=!colsVisible;var els=document.querySelectorAll('.col-extra');els.forEach(function(el){el.classList.toggle('col-hidden',!colsVisible);});document.querySelector('.col-toggle').textContent=colsVisible?'⚙️ 欄位':'⚙️ 欄位';}
+var sortCol='profit',sortDir=-1;var currentPage=1,pageSize=15,totalPages=1;var searchIdx=-1,searchMatches=[];
 function sortBy(col){if(sortCol===col)sortDir*=-1;else{sortCol=col;sortDir=-1;}data.sort(function(a,b){var va=a[col],vb=b[col];if(typeof va==='number'&&typeof vb==='number')return(va-vb)*sortDir;return String(va||'').localeCompare(String(vb||''))*sortDir;});currentPage=1;renderTable();document.querySelectorAll('.sort-arrow').forEach(function(el){el.textContent='';});var arrow=document.getElementById('sa-'+col);if(arrow)arrow.textContent=sortDir>0?'▲':'▼';}
 function doSearch(){var q=document.getElementById('searchBox').value.trim().toLowerCase();searchMatches=[];searchIdx=-1;if(!q){data=applyCurrentFilter();document.getElementById('searchInfo').textContent='';}else{data=applyCurrentFilter().filter(function(t){return String(t.ticket).toLowerCase().indexOf(q)>=0||String(t.symbol).toLowerCase().indexOf(q)>=0||String(t.open_date).indexOf(q)>=0;});document.getElementById('searchInfo').textContent=data.length+' 條匹配';ALL_TRADES.forEach(function(t,i){if(String(t.ticket).toLowerCase().indexOf(q)>=0||String(t.symbol).toLowerCase().indexOf(q)>=0||String(t.open_date).indexOf(q)>=0)searchMatches.push(i);});}currentPage=1;renderTable();}
 function applyCurrentFilter(){var df=document.getElementById('dateFrom').value;var dt=document.getElementById('dateTo').value;if(!df&&!dt)return ALL_TRADES.slice();return ALL_TRADES.filter(function(t){if(df&&t.open_date<df)return false;if(dt&&t.open_date>dt)return false;return true;});}
 document.getElementById('searchBox').addEventListener('keydown',function(e){if(e.key==='Enter'&&searchMatches.length>0){e.preventDefault();searchIdx=(searchIdx+1)%searchMatches.length;var gi=searchMatches[searchIdx];currentPage=Math.floor(gi/pageSize)+1;renderTable();setTimeout(function(){var rows=document.querySelectorAll('#tradeBody tr');rows.forEach(function(r){r.classList.remove('highlight');});var li=gi%pageSize;if(rows[li]){rows[li].classList.add('highlight');rows[li].scrollIntoView({behavior:'smooth',block:'center'});}document.getElementById('searchInfo').textContent=(searchIdx+1)+'/'+searchMatches.length+' 條匹配';},30);}});
-function renderTable(){totalPages=Math.ceil(data.length/pageSize)||1;if(currentPage>totalPages)currentPage=totalPages;var start=(currentPage-1)*pageSize;var page=data.slice(start,start+pageSize);var h='';page.forEach(function(t){var dirCls=t.type==='BUY'?'buy':'sell';var plCls=t.profit>0?'win':'loss';var volFixed=t.volume!==undefined?Number(t.volume).toFixed(2):'0.00';h+='<tr><td>'+t.ticket+'</td><td>'+t.open+'</td><td><span class=\"dir-badge '+dirCls+'\">'+t.type+'</span></td><td class=\"vol-num\">'+volFixed+'</td><td>'+t.symbol+'</td><td>'+(t.open_price||'-')+'</td><td class=\"col-extra\">'+t.close+'</td><td class=\"col-extra\">'+(t.close_price||'-')+'</td><td>'+(t.duration_str||'-')+'</td><td><span class=\"pl-badge '+plCls+'\">$'+t.profit_per_lot.toFixed(2)+'</span></td><td>$'+(t.swap||0).toFixed(2)+'</td><td><span class=\"pl-badge '+plCls+'\">$'+t.profit.toFixed(2)+'</span></td></tr>';});document.getElementById('tradeBody').innerHTML=h;var info=currentPage+'/'+totalPages+' ('+data.length+'筆)';document.getElementById('pageInfo').textContent=info;document.getElementById('pageInfo2').textContent=info;}
+function renderTable(){totalPages=Math.ceil(data.length/pageSize)||1;if(currentPage>totalPages)currentPage=totalPages;var start=(currentPage-1)*pageSize;var page=data.slice(start,start+pageSize);var h='';page.forEach(function(t){var cls=t.profit>0?'win':'loss';h+='<tr class="'+cls+'"><td>'+t.ticket+'</td><td>'+t.open+'</td><td>'+t.type+'</td><td>'+t.volume+'</td><td>'+t.symbol+'</td><td>'+(t.open_price||'-')+'</td><td>'+t.close+'</td><td>'+(t.close_price||'-')+'</td><td>'+(t.duration_str||'-')+'</td><td class="'+cls+'">$'+t.profit_per_lot.toFixed(2)+'</td><td>$'+(t.swap||0).toFixed(2)+'</td><td class="'+cls+'">$'+t.profit.toFixed(2)+'</td></tr>';});document.getElementById('tradeBody').innerHTML=h;var info=currentPage+'/'+totalPages+' ('+data.length+'筆)';document.getElementById('pageInfo').textContent=info;document.getElementById('pageInfo2').textContent=info;}
 renderTable();document.getElementById('sa-profit').textContent='▼';updateSummaryLine(ALL_TRADES.length,ALL_TRADES.filter(function(t){return t.profit>0;}).length,ALL_TRADES.reduce(function(a,t){return a+t.profit;},0));
 </script>
 <div class="metric-guide" style="max-width:1500px;margin:20px auto 0;padding:0 clamp(10px,1vw,20px) 20px">
@@ -954,11 +837,11 @@ def process_file(path):
 
 def main():
     root = tk.Tk()
-    root.title("MT Desk v7.2")
+    root.title("MT Desk v7.1")
     root.geometry("400x260")
     root.configure(bg="#f4f6f9")
     root.resizable(False, False)
-    tk.Label(root, text="MT Desk v7.2", font=("Segoe UI", 22, "bold"), fg="#2563eb", bg="#f4f6f9").pack(pady=(24, 4))
+    tk.Label(root, text="MT Desk v7.1", font=("Segoe UI", 22, "bold"), fg="#2563eb", bg="#f4f6f9").pack(pady=(24, 4))
     tk.Label(root, text="洞察驅動交易習慣分析報表 · ECharts 進階圖表", font=("Segoe UI", 10), fg="#6b7280", bg="#f4f6f9").pack(pady=(0, 20))
     status_var = tk.StringVar(value="選擇 HTML 報表檔案")
     status = tk.Label(root, textvariable=status_var, font=("Segoe UI", 9), fg="#6b7280", bg="#f4f6f9")
