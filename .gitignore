@@ -2,5 +2,4 @@ __pycache__/
 .venv/
 dist/
 build/
-*.spec
 mt_desk.egg-info/
