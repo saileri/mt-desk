@@ -44,15 +44,42 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
         equity.append(round(cum, 2))
         equity_dates.append(last_date)
 
-    # Max drawdown
+    # Max drawdown with peak/trough points
     peak = 0.0
     max_dd = 0.0
-    for v in equity:
-        if v > peak:
-            peak = v
-        dd = peak - v
+    dd_peak_idx = dd_trough_idx = 0
+    running_peak = 0.0
+    for i, v in enumerate(equity):
+        if v > running_peak:
+            running_peak = v
+        dd = running_peak - v
         if dd > max_dd:
             max_dd = dd
+            dd_peak_idx = equity.index(running_peak)
+            dd_trough_idx = i
+
+    # Per-trade duration in hours
+    durations: list[float] = []
+    for t in trades:
+        if t["open_time"] and t["close_time"]:
+            durations.append((t["close_time"] - t["open_time"]).total_seconds() / 3600)
+    avg_duration = sum(durations) / len(durations) if durations else 0
+    sorted_dur = sorted(durations)
+    median_duration = sorted_dur[len(durations) // 2] if durations else 0
+
+    # Weekday × hour heatmap data (0=Mon..6=Sun)
+    wd_hour: dict[tuple[int, int], dict[str, float]] = {}
+    for t in trades:
+        if t["open_time"]:
+            wd = t["open_time"].weekday()
+            h = t["open_time"].hour
+            key = (wd, h)
+            if key not in wd_hour:
+                wd_hour[key] = {"cnt": 0, "pl": 0.0, "wins": 0}
+            wd_hour[key]["cnt"] += 1
+            wd_hour[key]["pl"] += t["profit"]
+            if t["profit"] > 0:
+                wd_hour[key]["wins"] += 1
 
     # Sharpe ratio (daily returns)
     daily_pl: dict[str, float] = defaultdict(float)
@@ -149,17 +176,17 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
             elif dur_h < 168: dur_buckets["3~7天"] += 1
             elif dur_h < 672: dur_buckets["1~4週"] += 1
             else: dur_buckets[">1月"] += 1
-    # Long/short by month
+    # Long/short by month — P&L instead of count
     ls_monthly: dict[str, dict[str, float]] = {}
     for t in trades:
         if t["open_time"]:
             m = t["open_time"].strftime("%Y-%m")
             if m not in ls_monthly:
-                ls_monthly[m] = {"long": 0, "short": 0}
+                ls_monthly[m] = {"long": 0.0, "short": 0.0}
             if t["type"] in ("buy", "Buy"):
-                ls_monthly[m]["long"] += 1
+                ls_monthly[m]["long"] += t["profit"]
             else:
-                ls_monthly[m]["short"] += 1
+                ls_monthly[m]["short"] += t["profit"]
     # Quarterly symbol preference
     quarterly_sym: dict[str, dict[str, int]] = {}
     for t in trades:
@@ -197,6 +224,12 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
         "sharpe": sharpe,
         "equity": [round(v, 2) for v in equity],
         "equity_dates": equity_dates,
+        "dd_peak_idx": dd_peak_idx,
+        "dd_trough_idx": dd_trough_idx,
+        "avg_duration": round(avg_duration, 2),
+        "median_duration": round(median_duration, 2),
+        "durations": [round(d, 2) for d in durations],
+        "wd_hour": {f"{k[0]}-{k[1]}": v for k, v in wd_hour.items()},
         "streaks_win": streaks_win,
         "streaks_loss": streaks_loss,
         "win_dist": win_dist,
