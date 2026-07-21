@@ -83,8 +83,10 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
     total_swap = sum(t.get("swap", 0) for t in trades)
     total_volume = sum(t.get("volume", 0) for t in trades)
     sym_volume: dict[str, float] = defaultdict(float)
+    sym_swap: dict[str, float] = defaultdict(float)
     for t in trades:
         sym_volume[t["symbol"]] += t.get("volume", 0)
+        sym_swap[t["symbol"]] += t.get("swap", 0)
 
     sym_stats = []
     for sym in sorted(sym_pl, key=sym_pl.get, reverse=True):
@@ -210,6 +212,7 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
         "total_swap": round(total_swap, 2),
         "total_volume": round(total_volume, 2),
         "sym_volume": dict(sym_volume),
+        "sym_swap": dict(sym_swap),
         "dur_buckets": dur_buckets,
         "ls_monthly": dict(sorted(ls_monthly.items())),
         "quarterly_sym": dict(sorted(quarterly_sym.items())),

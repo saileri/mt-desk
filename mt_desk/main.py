@@ -29,8 +29,6 @@ def build_dashboard_html(account,trades,stats):
         ("夏普比率",f"{stats['sharpe']:.2f}","風險調整後報酬，<0 表示平均每日回報為負","--muted"),
         ("最佳",f"+${stats['best']:,.2f}","單筆最大盈利","--green"),
         ("最差",f"-${abs(stats['worst']):,.2f}","單筆最大虧損","--red"),
-        ("最長連續盈利",f"{stats['max_win_streak']}筆","按時間順序連續盈利的最長筆數（非全部連續）","--muted"),
-        ("最長連續虧損",f"{stats['max_loss_streak']}筆","按時間順序連續虧損的最長筆數（非全部連續）","--muted"),
     ]
     card_html="".join(f'<div class="kpi has-tip"><span class="lbl">{l}</span><span class="val" style="color:var({c})">{v}</span><span class="tip">{tip}</span></div>' for l,v,tip,c in cards)
     # ── Summary top section ──
@@ -38,20 +36,24 @@ def build_dashboard_html(account,trades,stats):
     sym_pie_json=json.dumps(sym_pie_data,ensure_ascii=False)
     total_swap_val=stats["total_swap"];total_volume_val=stats["total_volume"]
     swap_color="#00e676" if total_swap_val>=0 else"#ff5252"
+    # volume donut data
+    vol_data=[{"name":s.upper(),"value":round(v,2)} for s,v in stats["sym_volume"].items()]
+    vol_json=json.dumps(sorted(vol_data,key=lambda x:x["value"],reverse=True),ensure_ascii=False)
+    # swap bar data
+    sw_data=[{"name":s.upper(),"value":round(v,2)} for s,v in stats["sym_swap"].items()]
+    sw_json=json.dumps(sorted(sw_data,key=lambda x:x["value"]),ensure_ascii=False)
     summary_html=f'''<div class="summary-row">
   <div class="summary-card" style="grid-column:span 2">
     <div class="summary-title">品種偏好（交易次數佔比）<span style="font-size:10px;color:var(--muted);font-weight:400"> 💡 點擊品種可篩選明細</span></div>
     <div id="chart-symbol-pie" style="width:100%;height:300px"></div>
   </div>
   <div class="summary-card">
-    <div class="summary-title">交易量</div>
-    <div class="summary-val" id="summaryVolume">{total_volume_val:.2f} 手</div>
-    <div class="summary-sub">總交易手數</div>
+    <div class="summary-title">交易量佔比 <span style="font-size:10px;color:var(--muted);font-weight:400">{total_volume_val:.2f} 手</span></div>
+    <div id="chart-volume-donut" style="width:100%;height:200px"></div>
   </div>
   <div class="summary-card">
-    <div class="summary-title">Swap / 利息</div>
-    <div class="summary-val" id="summarySwap" style="color:{swap_color}">${total_swap_val:+,.2f}</div>
-    <div class="summary-sub">累計隔夜利息</div>
+    <div class="summary-title">Swap / 利息 <span style="font-size:10px;color:{swap_color};font-weight:400">${total_swap_val:+,.2f}</span></div>
+    <div id="chart-swap-bar" style="width:100%;height:200px"></div>
   </div>
 </div>'''
     # ── v6.1: 6 long-term habit analysis charts ──
@@ -98,6 +100,7 @@ def build_dashboard_html(account,trades,stats):
     html=html.replace("{WR}",f"{stats['wr']:.0f}%").replace("{CARDS}",card_html)
     html=html.replace("{SUMMARY}",summary_html).replace("{TRADE_JSON}",trade_json)
     html=html.replace("{ECHART_CDN}",ECHARTS_CDN).replace("{SYM_PIE_DATA}",sym_pie_json)
+    html=html.replace("{VOL_JSON}",vol_json).replace("{SWAP_JSON}",sw_json)
     html=html.replace("{DATE_MIN}",date_min).replace("{DATE_MAX}",date_max)
     # v6.1 chart JSON
     html=html.replace("{MONTHLY_PL_JSON}",monthly_pl_json)
@@ -163,7 +166,7 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 @media(max-width:768px){.summary-row{grid-template-columns:1fr 1fr}.chart-grid{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(3,1fr)}}
 @media print{@page{margin:12mm}.header,.date-bar,.toolbar,.theme-btn,.metric-guide{display:none!important}.chart-box{break-inside:avoid;page-break-inside:avoid}.table-wrap{overflow-x:visible}body{font-size:10pt;background:#fff!important;color:#000!important}.kpi{border:1px solid #ccc!important;background:#fff!important;box-shadow:none}.kpi .val{font-size:14pt}.kpi .lbl,.kpi .tip{color:#666!important}.chart-grid{grid-template-columns:1fr}.section-title{color:#000!important;border-bottom:1px solid #999}.summary-line{background:#f5f5f5!important;border:1px solid #ccc}}
 </style></head><body>
-<div class="header"><h1>MT Desk v6.2 — {ACCOUNT}</h1>
+<div class="header"><h1>MT Desk v6.2.1 — {ACCOUNT}</h1>
 <div style="display:flex;align-items:center;gap:12px">
   <div class="meta"><span id="headerCount">{COUNT}</span> 筆交易 · P/L: <b id="headerPL" style="color:{PL_COLOR}">{PL}</b> · 獲利佔比: <b id="headerWR">{WR}</b></div>
   <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌓</button>
@@ -247,6 +250,8 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 <script>
 var ALL_TRADES={TRADE_JSON};
 var SYM_PIE_DATA={SYM_PIE_DATA};
+var VOL_DATA={VOL_JSON};
+var SWAP_DATA={SWAP_JSON};
 var data=ALL_TRADES.slice();
 
 // ── v6.1 chart data ──
@@ -277,6 +282,23 @@ function initAllCharts(){
   ecOpt({id:'chart-symbol-pie',opt:{
     tooltip:{trigger:'item',formatter:'{b}: {c} 筆 ({d}%)'},legend:{bottom:0,textStyle:{color:tc,fontSize:10}},color:C10,
     series:[{type:'pie',radius:['45%','75%'],center:['50%','48%'],avoidLabelOverlap:false,label:{show:true,formatter:'{b} {d}%',fontSize:10,color:tc},data:SYM_PIE_DATA,emphasis:{scale:false}}]
+  }},isDark);
+  // Volume donut
+  ecOpt({id:'chart-volume-donut',opt:{
+    tooltip:{trigger:'item',formatter:'{b}: {c} 手 ({d}%)'},
+    series:[{type:'pie',radius:['50%','75%'],center:['50%','50%'],avoidLabelOverlap:false,
+      label:{show:true,formatter:'{b}\n{d}%',fontSize:10,color:tc},data:VOL_DATA,emphasis:{scale:false}}]
+  }},isDark);
+  // Swap bar
+  var swData=SWAP_DATA.slice().reverse();
+  var swNames=swData.map(function(d){return d.name;});
+  var swVals=swData.map(function(d){return d.value;});
+  ecOpt({id:'chart-swap-bar',opt:{
+    tooltip:{trigger:'axis',formatter:function(p){return p[0].name+': $'+p[0].value.toFixed(2);}},
+    grid:{left:60,right:20,top:5,bottom:20},
+    xAxis:{type:'value',axisLabel:{fontSize:9}},
+    yAxis:{type:'category',data:swNames,axisLabel:{fontSize:9}},
+    series:[{type:'bar',data:swVals.map(function(v){return{value:v,itemStyle:{color:v>=0?'#059669':'#dc2626'}};}),barWidth:'60%'}]
   }},isDark);
   // Pie click → filter table by symbol
   var pieEl=document.getElementById('chart-symbol-pie');if(pieEl&&pieEl._ec){pieEl._ec.off('click');pieEl._ec.on('click',function(params){if(params.name)filterBySymbol(params.name);});}
@@ -347,7 +369,7 @@ function initAllCharts(){
   }},isDark);
 }
 window.addEventListener('resize',function(){
-  ['chart-symbol-pie','chart-monthly-pl','chart-ls-monthly','chart-quarterly-sym','chart-duration','chart-equity','chart-session'].forEach(function(id){
+  ['chart-symbol-pie','chart-volume-donut','chart-swap-bar','chart-monthly-pl','chart-ls-monthly','chart-quarterly-sym','chart-duration','chart-equity','chart-session'].forEach(function(id){
     var el=document.getElementById(id);if(el&&el._ec)el._ec.resize();
   });
 });
@@ -389,7 +411,7 @@ function updateKPIs(){
   document.getElementById('headerWR').textContent=(total?(wins/total*100).toFixed(0):0)+'%';
   var vals=[total,'$'+(pl>=0?'+':'')+pl.toFixed(2),(total?(wins/total*100).toFixed(0):0)+'%',
     '+$'+avgW.toFixed(2),'-$'+avgL.toFixed(2),plr.toFixed(2),pf.toFixed(2),
-    '$'+maxdd.toFixed(2),(sharpe||0).toFixed(2),'$'+(best!==-Infinity?'+':'')+best.toFixed(2),'$-'+Math.abs(worst).toFixed(2),maxWS+'筆',maxLS+'筆'];
+    '$'+maxdd.toFixed(2),(sharpe||0).toFixed(2),'$'+(best!==-Infinity?'+':'')+best.toFixed(2),'$-'+Math.abs(worst).toFixed(2)];
   var kpiVals=document.querySelectorAll('.kpi .val');
   for(var i=0;i<Math.min(vals.length,kpiVals.length);i++){kpiVals[i].textContent=vals[i];}
   // Summary line
@@ -417,12 +439,8 @@ function updateChartsFromFilter(){
   CHART_DURATION={labels:Object.keys(dur_buckets),data:Object.values(dur_buckets)};
   var sesLabels=Object.keys(session);CHART_SESSION={labels:sesLabels,cnt:sesLabels.map(function(k){return session[k].cnt;}),wr:sesLabels.map(function(k){return session[k].cnt>0?Math.round(session[k].wins/session[k].cnt*100):0;})};
   // Update symbol pie
-  var symCount={};data.forEach(function(t){symCount[t.symbol]=(symCount[t.symbol]||0)+1;});SYM_PIE_DATA=Object.keys(symCount).map(function(s){return{name:s,value:symCount[s]};});
+  var symCount={},symVol={},symSwap={};data.forEach(function(t){symCount[t.symbol]=(symCount[t.symbol]||0)+1;symVol[t.symbol]=(symVol[t.symbol]||0)+(t.volume||0);symSwap[t.symbol]=(symSwap[t.symbol]||0)+(t.swap||0);});SYM_PIE_DATA=Object.keys(symCount).map(function(s){return{name:s,value:symCount[s]};});VOL_DATA=Object.keys(symVol).map(function(s){return{name:s,value:Math.round(symVol[s]*100)/100};}).sort(function(a,b){return b.value-a.value;});SWAP_DATA=Object.keys(symSwap).map(function(s){return{name:s,value:Math.round(symSwap[s]*100)/100};}).sort(function(a,b){return a.value-b.value;});
   initAllCharts();
-  // Update summary cards (volume + swap)
-  var totalVol=0,totalSwap=0;data.forEach(function(t){totalVol+=t.volume||0;totalSwap+=t.swap||0;});
-  var sv=document.getElementById('summaryVolume');if(sv)sv.textContent=totalVol.toFixed(2)+' 手';
-  var ss=document.getElementById('summarySwap');if(ss){ss.textContent='$'+(totalSwap>=0?'+':'')+totalSwap.toFixed(2);ss.style.color=totalSwap>=0?'#00e676':'#ff5252';}
 }
 function updateSummaryLine(total,wins,pl){
   var sl=document.getElementById('summaryLine');if(!sl)return;
@@ -467,7 +485,6 @@ renderTable();document.getElementById('sa-profit').textContent='▼';updateSumma
 <p><b>最大回撤</b>：權益曲線從歷史最高點到之後最低點的跌幅（美元）。衡量最壞情況下虧了多少。公式：max(0, max(peak − equity))。</p>
 <p><b>夏普比率</b>：風險調整後報酬 = 日均盈虧均值 ÷ 日均盈虧標準差 × √252。<b style="color:var(--red)">&lt;0</b> 表示平均每日回報為負。</p>
 <p><b>最佳／最差</b>：單筆交易的最大盈利與最大虧損金額。</p>
-<p><b>最長連續盈利／連續虧損</b>：按開倉時間排序後，profit > 0（或 ≤0）連續出現的最長筆數。</p>
 </div></details></div>
 </body></html>"""
 
@@ -482,9 +499,9 @@ def process_file(path):
     return result,len(trades)
 
 def main():
-    root=tk.Tk();root.title("MT Desk v6.2");root.geometry("400x260")
+    root=tk.Tk();root.title("MT Desk v6.2.1");root.geometry("400x260")
     root.configure(bg="#f0f2f5");root.resizable(False,False)
-    tk.Label(root,text="MT Desk v6.2",font=("Segoe UI",22,"bold"),fg="#2563eb",bg="#f0f2f5").pack(pady=(24,4))
+    tk.Label(root,text="MT Desk v6.2.1",font=("Segoe UI",22,"bold"),fg="#2563eb",bg="#f0f2f5").pack(pady=(24,4))
     tk.Label(root,text="6 張長期交易習慣分析圖表 · ECharts",font=("Segoe UI",10),fg="#6b7280",bg="#f0f2f5").pack(pady=(0,20))
     status_var=tk.StringVar(value="選擇 HTML 報表檔案")
     status=tk.Label(root,textvariable=status_var,font=("Segoe UI",9),fg="#6b7280",bg="#f0f2f5");status.pack(pady=(0,14))
