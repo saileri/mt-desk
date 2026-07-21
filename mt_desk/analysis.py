@@ -126,6 +126,48 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
     win_dist = [streaks_win.count(i) for i in range(1, max_s + 1)]
     loss_dist = [streaks_loss.count(i) for i in range(1, max_s + 1)]
 
+    # ── v6 long-term analysis ──
+    # Holding duration distribution
+    dur_buckets: dict[str, int] = {"<1h": 0, "1~4h": 0, "4~24h": 0, "1~3天": 0, "3~7天": 0, "1~4週": 0, ">1月": 0}
+    for t in trades:
+        if t["open_time"] and t["close_time"]:
+            dur_h = (t["close_time"] - t["open_time"]).total_seconds() / 3600
+            if dur_h < 1: dur_buckets["<1h"] += 1
+            elif dur_h < 4: dur_buckets["1~4h"] += 1
+            elif dur_h < 24: dur_buckets["4~24h"] += 1
+            elif dur_h < 72: dur_buckets["1~3天"] += 1
+            elif dur_h < 168: dur_buckets["3~7天"] += 1
+            elif dur_h < 672: dur_buckets["1~4週"] += 1
+            else: dur_buckets[">1月"] += 1
+    # Long/short by month
+    ls_monthly: dict[str, dict[str, float]] = {}
+    for t in trades:
+        if t["open_time"]:
+            m = t["open_time"].strftime("%Y-%m")
+            if m not in ls_monthly:
+                ls_monthly[m] = {"long": 0, "short": 0}
+            if t["type"] in ("buy", "Buy"):
+                ls_monthly[m]["long"] += 1
+            else:
+                ls_monthly[m]["short"] += 1
+    # Quarterly symbol preference
+    quarterly_sym: dict[str, dict[str, int]] = {}
+    for t in trades:
+        if t["open_time"]:
+            q = f"{t['open_time'].year}-Q{(t['open_time'].month - 1) // 3 + 1}"
+            quarterly_sym.setdefault(q, defaultdict(int))
+            quarterly_sym[q][t["symbol"].upper()] += 1
+    # Session preference (0-7 Asia / 8-15 London / 16-23 NY)
+    session: dict[str, dict[str, float]] = {"亞洲盤 00~07": {"cnt": 0, "pl": 0.0}, "倫敦盤 08~15": {"cnt": 0, "pl": 0.0}, "紐約盤 16~23": {"cnt": 0, "pl": 0.0}}
+    for t in trades:
+        if t["open_time"]:
+            h = t["open_time"].hour
+            if h < 8: s = "亞洲盤 00~07"
+            elif h < 16: s = "倫敦盤 08~15"
+            else: s = "紐約盤 16~23"
+            session[s]["cnt"] += 1
+            session[s]["pl"] += t["profit"]
+
     return {
         "count": len(trades),
         "wins": len(wins),
@@ -158,4 +200,8 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
         "total_swap": round(total_swap, 2),
         "total_volume": round(total_volume, 2),
         "sym_volume": dict(sym_volume),
+        "dur_buckets": dur_buckets,
+        "ls_monthly": dict(sorted(ls_monthly.items())),
+        "quarterly_sym": dict(sorted(quarterly_sym.items())),
+        "session": session,
     }

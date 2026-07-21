@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""MT Desk v5 — Symbol preference pie, volume, swap summary. 13-column trade table."""
+"""MT Desk v6 — Long-term trading habit analysis (6 charts)."""
 import json,io,os,sys,tempfile,tkinter as tk,threading,webbrowser
 from tkinter import filedialog,messagebox
 from datetime import datetime
 from pathlib import Path
 from mt_desk.parser import parse_statement
 from mt_desk.analysis import analyze
-# charts module no longer used (v5 replaced charts with summary section)
 
 if sys.stdout is None:sys.stdout=io.StringIO()
 if sys.stderr is None:sys.stderr=sys.stdout
 ECHARTS_CDN="https://cdn.jsdelivr.net/npm/echarts@5.6.0/dist/echarts.min.js"
+
+def _j(obj): return json.dumps(obj, ensure_ascii=False, default=str)
 
 def build_dashboard_html(account,trades,stats):
     avg_w=stats["avg_win"];avg_l=abs(stats["avg_loss"]);plr=avg_w/avg_l if avg_l>0 else 0
@@ -28,11 +29,10 @@ def build_dashboard_html(account,trades,stats):
         ("最差",f"-${abs(stats['worst']):,.2f}","單筆最大虧損","--red"),
     ]
     card_html="".join(f'<div class="kpi has-tip"><span class="lbl">{l}</span><span class="val" style="color:var({c})">{v}</span><span class="tip">{tip}</span></div>' for l,v,tip,c in cards)
-    # ── v5 top section: symbol pie, volume, swap ──
+    # ── Summary top section ──
     sym_pie_data=[{"name":s.upper(),"value":c} for s,c in stats["sym_count"].items()]
     sym_pie_json=json.dumps(sym_pie_data,ensure_ascii=False)
-    total_swap_val=stats["total_swap"]
-    total_volume_val=stats["total_volume"]
+    total_swap_val=stats["total_swap"];total_volume_val=stats["total_volume"]
     swap_color="#00e676" if total_swap_val>=0 else"#ff5252"
     summary_html=f'''<div class="summary-row">
   <div class="summary-card" style="grid-column:span 2">
@@ -50,35 +50,58 @@ def build_dashboard_html(account,trades,stats):
     <div class="summary-sub">累計隔夜利息</div>
   </div>
 </div>'''
-    # All trades as JSON (for client-side date filtering)
+    # ── v6: 6 long-term habit analysis charts ──
+    # 1. Monthly P&L bar
+    monthly=sorted(stats["monthly"].items());m_labels=[m[0] for m in monthly];m_data=[round(m[1],2) for m in monthly]
+    monthly_pl_json=_j({"labels":m_labels,"data":m_data})
+    # 2. Long/Short monthly stacked bar
+    ls=sorted(stats["ls_monthly"].items());ls_labels=[m[0] for m in ls]
+    ls_long=[m[1]["long"] for m in ls];ls_short=[m[1]["short"] for m in ls]
+    ls_monthly_json=_j({"labels":ls_labels,"long":ls_long,"short":ls_short})
+    # 3. Quarterly symbol stacked bar
+    qs=sorted(stats["quarterly_sym"].items());qs_labels=[q[0] for q in qs]
+    # Collect all symbols across quarters
+    all_syms=set();[all_syms.update(q[1].keys()) for q in qs]
+    top_syms=sorted(all_syms,key=lambda s:sum(stats["sym_count"].get(s.lower(),0) for _ in [1]),reverse=True)[:6]
+    qs_series=[{"name":s,"data":[q[1].get(s,0) for q in qs]} for s in top_syms]
+    quarterly_sym_json=_j({"labels":qs_labels,"series":qs_series})
+    # 4. Cumulative equity curve
+    eq=stats["equity"];eq_dates=stats["equity_dates"]
+    equity_json=_j({"dates":eq_dates,"equity":eq,"pl":stats["total_pl"]})
+    # 5. Holding duration distribution
+    dur_keys=list(stats["dur_buckets"].keys());dur_vals=list(stats["dur_buckets"].values())
+    duration_json=_j({"labels":dur_keys,"data":dur_vals})
+    # 6. Session preference
+    ses=stats["session"];ses_labels=list(ses.keys());ses_cnt=[ses[k]["cnt"] for k in ses_labels]
+    ses_wr=[round(ses[k]["pl"]/ses[k]["cnt"],0) if ses[k]["cnt"]>0 else 0 for k in ses_labels]
+    session_json=_j({"labels":ses_labels,"cnt":ses_cnt,"wr":ses_wr})
+
+    # All trades as JSON
     all_trades=[{
-        "ticket":str(t["ticket"]),
-        "open":t["open_time"].strftime("%Y-%m-%d %H:%M") if t["open_time"] else"-",
-        "close":t["close_time"].strftime("%Y-%m-%d %H:%M") if t["close_time"] else"-",
-        "type":t["type"].upper(),
-        "volume":t["volume"],
-        "symbol":t["symbol"].upper(),
-        "open_price":round(t.get("open_price",0),5),
-        "close_price":round(t.get("close_price",0),5),
-        "sl":round(t.get("sl",0),5),
-        "tp":round(t.get("tp",0),5),
-        "commission":round(t.get("commission",0),2),
-        "swap":round(t.get("swap",0),2),
-        "profit":round(t["profit"],2),
-        "open_date":t["open_time"].strftime("%Y-%m-%d") if t["open_time"] else"",
+        "ticket":str(t["ticket"]),"open":t["open_time"].strftime("%Y-%m-%d %H:%M") if t["open_time"] else"-",
+        "close":t["close_time"].strftime("%Y-%m-%d %H:%M") if t["close_time"] else"-","type":t["type"].upper(),
+        "volume":t["volume"],"symbol":t["symbol"].upper(),"open_price":round(t.get("open_price",0),5),
+        "close_price":round(t.get("close_price",0),5),"sl":round(t.get("sl",0),5),"tp":round(t.get("tp",0),5),
+        "commission":round(t.get("commission",0),2),"swap":round(t.get("swap",0),2),
+        "profit":round(t["profit"],2),"open_date":t["open_time"].strftime("%Y-%m-%d") if t["open_time"] else"",
     } for t in trades]
     trade_json=json.dumps(all_trades,ensure_ascii=False)
     pl_color="#69f0ae" if stats["total_pl"]>=0 else"#ff8a80"
-    # Date range for the full data
     all_dates=sorted(set(t["open_date"] for t in all_trades if t["open_date"]))
-    date_min=all_dates[0] if all_dates else""
-    date_max=all_dates[-1] if all_dates else""
+    date_min=all_dates[0] if all_dates else"";date_max=all_dates[-1] if all_dates else""
     html=_HTML.replace("{ACCOUNT}",account).replace("{COUNT}",str(stats["count"]))
     html=html.replace("{PL}",f"${stats['total_pl']:+,.2f}").replace("{PL_COLOR}",pl_color)
     html=html.replace("{WR}",f"{stats['wr']:.0f}%").replace("{CARDS}",card_html)
-    html=html.replace("{CHARTS}",summary_html).replace("{TRADE_JSON}",trade_json)
+    html=html.replace("{SUMMARY}",summary_html).replace("{TRADE_JSON}",trade_json)
     html=html.replace("{ECHART_CDN}",ECHARTS_CDN).replace("{SYM_PIE_DATA}",sym_pie_json)
     html=html.replace("{DATE_MIN}",date_min).replace("{DATE_MAX}",date_max)
+    # v6 chart JSON
+    html=html.replace("{MONTHLY_PL_JSON}",monthly_pl_json)
+    html=html.replace("{LS_MONTHLY_JSON}",ls_monthly_json)
+    html=html.replace("{QUARTERLY_SYM_JSON}",quarterly_sym_json)
+    html=html.replace("{EQUITY_JSON}",equity_json)
+    html=html.replace("{DURATION_JSON}",duration_json)
+    html=html.replace("{SESSION_JSON}",session_json)
     return html
 
 _HTML=r"""<!DOCTYPE html><html lang="zh-HK"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -105,10 +128,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 .kpi .tip{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;line-height:1.4;white-space:normal;max-width:220px;text-align:left;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.15);pointer-events:none}
 .kpi.has-tip .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--border)}
 .kpi.has-tip:hover .tip{display:block}
-.charts{display:grid;grid-template-columns:1fr 1fr;gap:clamp(6px,0.6vw,10px)}
-.chart-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:8px}
-.chart-card.wide{grid-column:1/-1}
-.chart-label{text-align:center;font-size:clamp(10px,0.8vw,12px);color:var(--muted);padding:4px 0 2px;font-weight:500}
+.summary-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+.summary-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;justify-content:center;min-height:120px}
+.summary-title{font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:500}
+.summary-val{font-size:28px;font-weight:700;color:var(--text)}
+.summary-sub{font-size:11px;color:var(--muted);margin-top:4px}
+.section-title{font-size:14px;font-weight:600;color:var(--text);margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(8px,0.8vw,12px);margin-bottom:16px}
+.chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:10px 12px 4px}
+.chart-box .axis-hint{font-size:9px;color:var(--muted);text-align:right;margin-top:-6px;margin-bottom:2px;padding-right:4px}
+.chart-tag{display:inline-block;font-size:9px;padding:1px 6px;border-radius:3px;margin-right:4px;vertical-align:middle;font-weight:500}
+.chart-tag.x{background:var(--muted);color:var(--bg);opacity:.7}.chart-tag.y{background:var(--blue);color:#fff;opacity:.7}
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
 .toolbar input{padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:clamp(10px,0.8vw,13px);outline:none;background:var(--surface);color:var(--text);font-family:inherit;transition:border-color .2s;width:clamp(140px,18vw,200px)}
 .toolbar input:focus{border-color:var(--blue)}.toolbar input::placeholder{color:var(--muted)}
@@ -122,14 +152,9 @@ th:hover{color:var(--text)}th .sort-arrow{font-size:8px;margin-left:3px;color:va
 td{padding:clamp(4px,0.4vw,6px) clamp(8px,0.7vw,12px);border-bottom:1px solid var(--border);color:var(--text)}
 tr:hover td{background:var(--surface)}.win{color:var(--green)!important}.loss{color:var(--red)!important}
 tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
-.summary-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px}
-.summary-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;justify-content:center;min-height:120px}
-.summary-title{font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:500}
-.summary-val{font-size:28px;font-weight:700;color:var(--text)}
-.summary-sub{font-size:11px;color:var(--muted);margin-top:4px}
-@media(max-width:768px){.summary-row{grid-template-columns:1fr 1fr}.charts{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:768px){.summary-row{grid-template-columns:1fr 1fr}.chart-grid{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(3,1fr)}}
 </style></head><body>
-<div class="header"><h1>MT Desk — {ACCOUNT}</h1>
+<div class="header"><h1>MT Desk v6 — {ACCOUNT}</h1>
 <div style="display:flex;align-items:center;gap:12px">
   <div class="meta"><span id="headerCount">{COUNT}</span> 筆交易 · P/L: <b id="headerPL" style="color:{PL_COLOR}">{PL}</b> · 勝率: <b id="headerWR">{WR}</b></div>
   <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌓</button>
@@ -143,8 +168,37 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
   <span class="lbl" id="filterInfo"></span>
 </div>
 <div class="main"><div class="kpi-row" id="kpiRow">{CARDS}</div>
-{CHARTS}
-<div class="section-title" style="margin:12px 0 6px">逐筆明細</div>
+{SUMMARY}
+<!-- ══════ v6: Long-Term Trading Habit Analysis ══════ -->
+<div class="section-title">📊 交易習慣分析</div>
+<div class="chart-grid">
+  <div class="chart-box">
+    <span class="chart-tag x">X：月份</span><span class="chart-tag y">Y：$ USD</span>
+    <div id="chart-monthly-pl" style="width:100%;height:280px"></div>
+  </div>
+  <div class="chart-box">
+    <span class="chart-tag x">X：月份</span><span class="chart-tag y">Y：筆數</span>
+    <div id="chart-ls-monthly" style="width:100%;height:280px"></div>
+  </div>
+  <div class="chart-box">
+    <span class="chart-tag x">X：季度</span><span class="chart-tag y">Y：筆數</span>
+    <div id="chart-quarterly-sym" style="width:100%;height:300px"></div>
+  </div>
+  <div class="chart-box">
+    <span class="chart-tag x">X：持倉時間區間</span><span class="chart-tag y">Y：筆數</span>
+    <div id="chart-duration" style="width:100%;height:300px"></div>
+  </div>
+  <div class="chart-box">
+    <span class="chart-tag x">X：日期</span><span class="chart-tag y">Y：$ USD 累計</span>
+    <div id="chart-equity" style="width:100%;height:280px"></div>
+  </div>
+  <div class="chart-box">
+    <span class="chart-tag x">X：交易時段</span><span class="chart-tag y">Y：筆數</span>
+    <div id="chart-session" style="width:100%;height:280px"></div>
+  </div>
+</div>
+<!-- ══════ Trade Table ══════ -->
+<div class="section-title">逐筆明細</div>
 <div class="toolbar"><input type="text" id="searchBox" placeholder="搜尋 Ticket..." oninput="doSearch()">
 <span id="searchInfo" style="font-size:clamp(10px,0.8vw,13px);color:var(--muted)"></span><span style="flex:1"></span>
 <span class="page-info">每頁</span><select id="pageSize" onchange="pageSize=+this.value;currentPage=1;renderTable()">
@@ -178,52 +232,124 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 var ALL_TRADES={TRADE_JSON};
 var SYM_PIE_DATA={SYM_PIE_DATA};
 var data=ALL_TRADES.slice();
+
+// ── v6 chart data ──
+var CHART_MONTHLY_PL={MONTHLY_PL_JSON};
+var CHART_LS_MONTHLY={LS_MONTHLY_JSON};
+var CHART_QUARTERLY_SYM={QUARTERLY_SYM_JSON};
+var CHART_EQUITY={EQUITY_JSON};
+var CHART_DURATION={DURATION_JSON};
+var CHART_SESSION={SESSION_JSON};
+
 (function(){var s=localStorage.getItem('mt-theme');var m=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',s||m);})();
-window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(e){if(!localStorage.getItem('mt-theme')){document.documentElement.setAttribute('data-theme',e.matches?'dark':'light');initCharts();}});
-function toggleTheme(){var c=document.documentElement.getAttribute('data-theme');var n=c==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('mt-theme',n);initCharts();}
-function initCharts(){
+window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(e){if(!localStorage.getItem('mt-theme')){document.documentElement.setAttribute('data-theme',e.matches?'dark':'light');initAllCharts();}});
+function toggleTheme(){var c=document.documentElement.getAttribute('data-theme');var n=c==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('mt-theme',n);initAllCharts();}
+
+// ── ECharts color palette ──
+var C10=['#5470c6','#91cc75','#fac858','#ee6666','#73c0de','#3ba272','#fc8452','#9a60b4','#ea7ccc','#48b8d0'];
+
+function ecOpt(o,isDark){
+  if(isDark)echarts.registerTheme('mt-dark',{});
+  var el=document.getElementById(o.id);
+  if(!el)return;
+  if(el._ec)el._ec.dispose();
+  var chart=echarts.init(el,isDark?'dark':null);chart.setOption(o.opt);el._ec=chart;
+}
+
+function initAllCharts(){
   var isDark=document.documentElement.getAttribute('data-theme')==='dark';
   var tc=isDark?'#e2e8f0':'#1f2937';
-  var el=document.getElementById('chart-symbol-pie');
-  if(!el)return;
-  if(el._echart)el._echart.dispose();
-  var colors=['#5470c6','#91cc75','#fac858','#ee6666','#73c0de','#3ba272','#fc8452','#9a60b4','#ea7ccc','#48b8d0'];
-  var opt={
-    tooltip:{trigger:'item',formatter:'{b}: {c} 筆 ({d}%)'},
-    legend:{bottom:0,textStyle:{color:tc,fontSize:10}},
-    color:colors,
-    series:[{
-      type:'pie',radius:['45%','75%'],center:['50%','48%'],
-      avoidLabelOverlap:false,
-      label:{show:true,formatter:'{b} {d}%',fontSize:10,color:tc},
-      data:SYM_PIE_DATA,
-      emphasis:{scale:false}
-    }]
-  };
-  var chart=echarts.init(el,isDark?'dark':null);
-  chart.setOption(opt);el._echart=chart;
+  // 0. Symbol pie
+  ecOpt({id:'chart-symbol-pie',opt:{
+    tooltip:{trigger:'item',formatter:'{b}: {c} 筆 ({d}%)'},legend:{bottom:0,textStyle:{color:tc,fontSize:10}},color:C10,
+    series:[{type:'pie',radius:['45%','75%'],center:['50%','48%'],avoidLabelOverlap:false,label:{show:true,formatter:'{b} {d}%',fontSize:10,color:tc},data:SYM_PIE_DATA,emphasis:{scale:false}}]
+  }},isDark);
+  // 1. Monthly P&L
+  var mp=CHART_MONTHLY_PL;
+  ecOpt({id:'chart-monthly-pl',opt:{
+    tooltip:{trigger:'axis',formatter:function(p){return p[0].name+'<br/>盈虧: $'+p[0].value.toFixed(2);}},
+    grid:{left:65,right:15,top:10,bottom:35},color:['#059669'],
+    xAxis:{type:'category',data:mp.labels,axisLabel:{fontSize:9,rotate:30,interval:Math.max(1,Math.floor(mp.labels.length/8))},name:'月份',nameTextStyle:{fontSize:9,color:tc}},
+    yAxis:{type:'value',axisLabel:{formatter:'$ {value}'},name:'$ USD',nameTextStyle:{fontSize:9,color:tc}},
+    series:[{type:'bar',data:mp.data.map(function(v){return{value:v,itemStyle:{color:v>=0?'#059669':'#dc2626'}};}),barWidth:'60%'}]
+  }},isDark);
+  // 2. Long/Short monthly
+  var ls=CHART_LS_MONTHLY;
+  ecOpt({id:'chart-ls-monthly',opt:{
+    tooltip:{trigger:'axis'},grid:{left:65,right:15,top:10,bottom:35},
+    xAxis:{type:'category',data:ls.labels,axisLabel:{fontSize:9,rotate:30,interval:Math.max(1,Math.floor(ls.labels.length/8))},name:'月份',nameTextStyle:{fontSize:9,color:tc}},
+    yAxis:{type:'value',name:'筆數',nameTextStyle:{fontSize:9,color:tc}},
+    legend:{bottom:0,textStyle:{fontSize:10,color:tc}},
+    series:[
+      {name:'做多 Long',type:'bar',stack:'total',data:ls.long,itemStyle:{color:'#059669'},barWidth:'50%'},
+      {name:'做空 Short',type:'bar',stack:'total',data:ls.short,itemStyle:{color:'#dc2626'},barWidth:'50%'}
+    ]
+  }},isDark);
+  // 3. Quarterly symbol
+  var qs=CHART_QUARTERLY_SYM;
+  var qsSeries=qs.series.map(function(s,i){return{name:s.name,type:'bar',stack:'total',data:s.data,itemStyle:{color:C10[i%10]},barWidth:'50%'};});
+  ecOpt({id:'chart-quarterly-sym',opt:{
+    tooltip:{trigger:'axis'},grid:{left:65,right:15,top:10,bottom:35},
+    xAxis:{type:'category',data:qs.labels,axisLabel:{fontSize:10},name:'季度',nameTextStyle:{fontSize:9,color:tc}},
+    yAxis:{type:'value',name:'筆數',nameTextStyle:{fontSize:9,color:tc}},
+    legend:{bottom:0,textStyle:{fontSize:9,color:tc}},color:C10,
+    series:qsSeries
+  }},isDark);
+  // 4. Holding duration
+  var dur=CHART_DURATION;
+  ecOpt({id:'chart-duration',opt:{
+    tooltip:{trigger:'axis',formatter:function(p){return p[0].name+'<br/>'+p[0].value+' 筆';}},
+    grid:{left:65,right:15,top:10,bottom:25},color:['#448aff'],
+    xAxis:{type:'category',data:dur.labels,axisLabel:{fontSize:10},name:'持倉時間',nameTextStyle:{fontSize:9,color:tc}},
+    yAxis:{type:'value',name:'筆數',nameTextStyle:{fontSize:9,color:tc}},
+    series:[{type:'bar',data:dur.data.map(function(v,i){return{value:v,itemStyle:{color:C10[i%10]}};}),barWidth:'60%',label:{show:true,position:'top',fontSize:10,color:tc}}]
+  }},isDark);
+  // 5. Equity curve
+  var eq=CHART_EQUITY;
+  ecOpt({id:'chart-equity',opt:{
+    tooltip:{trigger:'axis',formatter:function(p){return p[0].name+'<br/>累計: $'+p[0].value.toFixed(2);}},
+    grid:{left:65,right:15,top:10,bottom:35},
+    xAxis:{type:'category',data:eq.dates,axisLabel:{fontSize:9,rotate:30,interval:Math.max(1,Math.floor(eq.dates.length/8))},name:'日期',nameTextStyle:{fontSize:9,color:tc}},
+    yAxis:{type:'value',axisLabel:{formatter:'$ {value}'},name:'$ USD 累計',nameTextStyle:{fontSize:9,color:tc}},
+    series:[{type:'line',data:eq.equity,smooth:true,symbol:'none',lineStyle:{color:eq.pl>=0?'#059669':'#dc2626',width:2},
+      areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:eq.pl>=0?'rgba(5,150,105,0.2)':'rgba(220,38,38,0.2)'},{offset:1,color:'rgba(0,0,0,0)'}]}}}]
+  }},isDark);
+  // 6. Session preference
+  var ses=CHART_SESSION;
+  ecOpt({id:'chart-session',opt:{
+    tooltip:{trigger:'axis'},
+    grid:{left:45,right:55,top:10,bottom:20},
+    xAxis:{type:'category',data:ses.labels,axisLabel:{fontSize:10},name:'交易時段 (伺服器時間)',nameTextStyle:{fontSize:9,color:tc}},
+    yAxis:[
+      {type:'value',name:'筆數',nameTextStyle:{fontSize:9,color:tc}},
+      {type:'value',name:'勝率 %',nameTextStyle:{fontSize:9,color:tc},axisLabel:{formatter:'{value}%'}}
+    ],
+    series:[
+      {name:'交易筆數',type:'bar',data:ses.cnt,itemStyle:{color:'#448aff'},barWidth:'50%',label:{show:true,position:'inside',fontSize:10,color:'#fff'}},
+      {name:'勝率',type:'line',yAxisIndex:1,data:ses.wr,itemStyle:{color:'#fac858'},symbol:'circle',symbolSize:8,label:{show:true,formatter:function(p){return p.value+'%';},fontSize:10,color:tc}}
+    ]
+  }},isDark);
 }
-window.addEventListener('resize',function(){var el=document.getElementById('chart-symbol-pie');if(el&&el._echart)el._echart.resize();});
-initCharts();
+window.addEventListener('resize',function(){
+  ['chart-symbol-pie','chart-monthly-pl','chart-ls-monthly','chart-quarterly-sym','chart-duration','chart-equity','chart-session'].forEach(function(id){
+    var el=document.getElementById(id);if(el&&el._ec)el._ec.resize();
+  });
+});
+initAllCharts();
 
 // Date filter
 function applyDateFilter(){
   var df=document.getElementById('dateFrom').value;
   var dt=document.getElementById('dateTo').value;
   if(!df&&!dt){resetDateFilter();return;}
-  data=ALL_TRADES.filter(function(t){
-    if(df&&t.open_date<df)return false;
-    if(dt&&t.open_date>dt)return false;
-    return true;
-  });
+  data=ALL_TRADES.filter(function(t){if(df&&t.open_date<df)return false;if(dt&&t.open_date>dt)return false;return true;});
   updateKPIs();currentPage=1;renderTable();
   document.getElementById('filterInfo').textContent=' ('+data.length+' 筆)';
 }
 function resetDateFilter(){
   document.getElementById('dateFrom').value='{DATE_MIN}';
   document.getElementById('dateTo').value='{DATE_MAX}';
-  data=ALL_TRADES.slice();
-  updateKPIs();currentPage=1;renderTable();
+  data=ALL_TRADES.slice();updateKPIs();currentPage=1;renderTable();
   document.getElementById('filterInfo').textContent='';
 }
 function updateKPIs(){
@@ -241,13 +367,12 @@ function updateKPIs(){
   var kpiVals=document.querySelectorAll('.kpi .val');
   for(var i=0;i<Math.min(vals.length,kpiVals.length);i++){kpiVals[i].textContent=vals[i];}
 }
-
 var sortCol='profit',sortDir=-1;var currentPage=1,pageSize=15,totalPages=1;var searchIdx=-1,searchMatches=[];
 function sortBy(col){if(sortCol===col)sortDir*=-1;else{sortCol=col;sortDir=-1;}data.sort(function(a,b){var va=a[col],vb=b[col];if(typeof va==='number')return(va-vb)*sortDir;return String(va).localeCompare(String(vb))*sortDir;});currentPage=1;renderTable();document.querySelectorAll('.sort-arrow').forEach(function(el){el.textContent='';});var arrow=document.getElementById('sa-'+col);if(arrow)arrow.textContent=sortDir>0?'▲':'▼';}
 function doSearch(){var q=document.getElementById('searchBox').value.trim().toLowerCase();searchMatches=[];searchIdx=-1;if(!q){data=applyCurrentFilter();document.getElementById('searchInfo').textContent='';}else{data=applyCurrentFilter().filter(function(t){return String(t.ticket).toLowerCase().indexOf(q)>=0;});document.getElementById('searchInfo').textContent=data.length+' 條匹配';ALL_TRADES.forEach(function(t,i){if(String(t.ticket).toLowerCase().indexOf(q)>=0)searchMatches.push(i);});}currentPage=1;renderTable();}
 function applyCurrentFilter(){var df=document.getElementById('dateFrom').value;var dt=document.getElementById('dateTo').value;if(!df&&!dt)return ALL_TRADES.slice();return ALL_TRADES.filter(function(t){if(df&&t.open_date<df)return false;if(dt&&t.open_date>dt)return false;return true;});}
 document.getElementById('searchBox').addEventListener('keydown',function(e){if(e.key==='Enter'&&searchMatches.length>0){e.preventDefault();searchIdx=(searchIdx+1)%searchMatches.length;var gi=searchMatches[searchIdx];currentPage=Math.floor(gi/pageSize)+1;renderTable();setTimeout(function(){var rows=document.querySelectorAll('#tradeBody tr');rows.forEach(function(r){r.classList.remove('highlight');});var li=gi%pageSize;if(rows[li]){rows[li].classList.add('highlight');rows[li].scrollIntoView({behavior:'smooth',block:'center'});}document.getElementById('searchInfo').textContent=(searchIdx+1)+'/'+searchMatches.length+' 條匹配';},30);}});
-function renderTable(){totalPages=Math.ceil(data.length/pageSize)||1;if(currentPage>totalPages)currentPage=totalPages;var start=(currentPage-1)*pageSize;var page=data.slice(start,start+pageSize);var h='';page.forEach(function(t){var cls=t.profit>0?'win':'loss';h+='<tr class="'+cls+'"><td>'+t.ticket+'</td><td>'+t.open+'</td><td>'+t.type+'</td><td>'+t.volume+'</td><td>'+t.symbol+'</td><td>'+(t.open_price||'-')+'</td><td>'+(t.sl||'-')+'</td><td>'+(t.tp||'-')+'</td><td>'+t.close+'</td><td>'+(t.close_price||'-')+'</td><td>$'+(t.commission||0).toFixed(2)+'</td><td>$'+(t.swap||0).toFixed(2)+'</td><td class="'+cls+'">$'+t.profit.toFixed(2)+'</td></tr>';});document.getElementById('tradeBody').innerHTML=h;var info=currentPage+'/'+totalPages+' ('+data.length+'筆)';document.getElementById('pageInfo').textContent=info;document.getElementById('pageInfo2').textContent=info;}
+function renderTable(){totalPages=Math.ceil(data.length/pageSize)||1;if(currentPage>totalPages)currentPage=totalPages;var start=(currentPage-1)*pageSize;var page=data.slice(start,start+pageSize);var h='';page.forEach(function(t){var cls=t.profit>0?'win':'loss';h+='<tr class=\"'+cls+'\"><td>'+t.ticket+'</td><td>'+t.open+'</td><td>'+t.type+'</td><td>'+t.volume+'</td><td>'+t.symbol+'</td><td>'+(t.open_price||'-')+'</td><td>'+(t.sl||'-')+'</td><td>'+(t.tp||'-')+'</td><td>'+t.close+'</td><td>'+(t.close_price||'-')+'</td><td>$'+(t.commission||0).toFixed(2)+'</td><td>$'+(t.swap||0).toFixed(2)+'</td><td class=\"'+cls+'\">$'+t.profit.toFixed(2)+'</td></tr>';});document.getElementById('tradeBody').innerHTML=h;var info=currentPage+'/'+totalPages+' ('+data.length+'筆)';document.getElementById('pageInfo').textContent=info;document.getElementById('pageInfo2').textContent=info;}
 renderTable();document.getElementById('sa-profit').textContent='▼';</script>
 <div class="metric-guide" style="max-width:1440px;margin:20px auto 0;padding:0 clamp(10px,1vw,20px) 20px">
 <details style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;cursor:pointer">
@@ -277,10 +402,10 @@ def process_file(path):
     return result,len(trades)
 
 def main():
-    root=tk.Tk();root.title("MT Desk");root.geometry("400x260")
+    root=tk.Tk();root.title("MT Desk v6");root.geometry("400x260")
     root.configure(bg="#f0f2f5");root.resizable(False,False)
-    tk.Label(root,text="MT Desk",font=("Segoe UI",22,"bold"),fg="#2563eb",bg="#f0f2f5").pack(pady=(24,4))
-    tk.Label(root,text="ECharts · 瀏覽器篩選日期 · 8 張圖表",font=("Segoe UI",10),fg="#6b7280",bg="#f0f2f5").pack(pady=(0,20))
+    tk.Label(root,text="MT Desk v6",font=("Segoe UI",22,"bold"),fg="#2563eb",bg="#f0f2f5").pack(pady=(24,4))
+    tk.Label(root,text="6 張長期交易習慣分析圖表 · ECharts",font=("Segoe UI",10),fg="#6b7280",bg="#f0f2f5").pack(pady=(0,20))
     status_var=tk.StringVar(value="選擇 HTML 報表檔案")
     status=tk.Label(root,textvariable=status_var,font=("Segoe UI",9),fg="#6b7280",bg="#f0f2f5");status.pack(pady=(0,14))
     def open_file():
