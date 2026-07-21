@@ -28,7 +28,15 @@ def extract_cells(row_html: str) -> list[str]:
     # Split by closing </td> or </th>
     parts = re.split(r"</t[dh]\s*>", row_html, flags=re.IGNORECASE)
     for part in parts[:-1]:  # last part is after final closing tag
-        gt = part.rfind(">")
+        # Find the opening <td> or <th> tag (case-insensitive)
+        lo = part.lower()
+        tag_start = lo.rfind("<td")
+        if tag_start < 0:
+            tag_start = lo.rfind("<th")
+        if tag_start < 0:
+            continue
+        # Find the '>' that closes the opening tag
+        gt = part.find(">", tag_start)
         if gt < 0:
             continue
         content = part[gt + 1:]
@@ -117,14 +125,24 @@ def parse_statement(filepath: str | Path, chunk_size: int = 8 * 1024 * 1024) -> 
 def _detect_and_parse(html: str, name: str = "unknown") -> dict:
     """Parse HTML text directly (no file I/O)."""
 
-    # Detect format
+    # Detect format — MT5 detection covers multiple report types
     is_mt5 = any(kw in html for kw in [
-        "交易历史报告", "Trade History", "Trading History"
+        "交易历史报告", "交易帐号报告", "交易账号报告",
+        "Trade History", "Trading History", "Account Statement",
+        "MT5", "MetaTrader 5",
     ])
 
     # Extract account
     if is_mt5:
-        m = re.search(r"(\d{5,})\s*[:：]", html)
+        # Try multiple patterns for MT5 account extraction
+        # Pattern 1: "NNNNNNN: NAME -" in title
+        m = re.search(r"(\d{5,})\s*[:：]\s*[\w\s]+-", html)
+        # Pattern 2: "NNNNNN: NAME" in title
+        if not m:
+            m = re.search(r"(\d{5,})\s*[:：]", html)
+        # Pattern 3: digits in bold after "账户" or "Account"
+        if not m:
+            m = re.search(r"(?:账户|Account)[^<]*<\w[^>]*>\s*<b>(\d{5,})", html)
     else:
         m = re.search(r"Account:\s*(\d+)", html, re.IGNORECASE)
     account = m.group(1) if m else name
@@ -288,11 +306,11 @@ def _build_col_map(cells: list[str]) -> dict:
             mapping["volume"] = i
         if any(kw in cl for kw in ["symbol", "item", "品种", "品種"]):
             mapping["symbol"] = i
-        if any(kw in cl for kw in ["price"]) and "current" not in cl and "close" not in cl:
+        if any(kw in cl for kw in ["price", "价格", "價格"]) and "current" not in cl and "close" not in cl:
             mapping["open_price"] = i
-        if any(kw in cl for kw in ["current", "market"]):
+        if any(kw in cl for kw in ["current", "market", "市场价", "市場價", "市價"]):
             mapping["close_price"] = i
-        if any(kw in cl for kw in ["sl", "stop"]) and "loss" in cl:
+        if any(kw in cl for kw in ["sl", "stop", "止损", "止損"]):
             mapping["sl"] = i
         if any(kw in cl for kw in ["tp", "takeprofit"]):
             mapping["tp"] = i
