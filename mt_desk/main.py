@@ -18,10 +18,10 @@ def build_dashboard_html(account,trades,stats):
     cards=[
         ("總交易",str(stats["count"]),"總交易筆數",""),
         ("總盈虧",f"${stats['total_pl']:+,.2f}","所有交易的淨盈虧金額總和","--green" if stats["total_pl"]>=0 else"--red"),
-        ("勝率",f"{stats['wr']:.0f}%","盈利交易數 ÷ 總交易數 × 100%","--green"),
+        ("獲利佔比",f"{stats['wr']:.0f}%","盈利交易數 ÷ 總交易數 × 100%","--green"),
         ("平均盈利",f"+${avg_w:,.2f}","盈利交易的平均獲利金額","--green"),
         ("平均虧損",f"-${avg_l:,.2f}","虧損交易的平均損失金額","--red"),
-        ("盈虧比",f"{plr:.2f}","平均盈利 ÷ 平均虧損，<1 表示每賺 1 元要賠更多元，即使勝率高也會虧損","--muted" if plr<1 else"--green"),
+        ("盈虧比",f"{plr:.2f}","平均盈利 ÷ 平均虧損，<1 表示每賺 1 元要賠更多元，即使獲利佔比高也會虧損","--muted" if plr<1 else"--green"),
         ("盈利因子",f"{stats['pf']:.2f}" if stats["pf"]!=float("inf") else"∞","總盈利 ÷ 總虧損絕對值，<1 代表虧損策略","--muted"),
         ("最大回撤",f"${stats['max_dd']:,.2f}","權益曲線從最高點到最低點的最大跌幅","--red"),
         ("夏普比率",f"{stats['sharpe']:.2f}","風險調整後報酬，<0 表示平均每日回報為負","--muted"),
@@ -41,12 +41,12 @@ def build_dashboard_html(account,trades,stats):
   </div>
   <div class="summary-card">
     <div class="summary-title">交易量</div>
-    <div class="summary-val">{total_volume_val:.2f} 手</div>
+    <div class="summary-val" id="summaryVolume">{total_volume_val:.2f} 手</div>
     <div class="summary-sub">總交易手數</div>
   </div>
   <div class="summary-card">
     <div class="summary-title">Swap / 利息</div>
-    <div class="summary-val" style="color:{swap_color}">${total_swap_val:+,.2f}</div>
+    <div class="summary-val" id="summarySwap" style="color:{swap_color}">${total_swap_val:+,.2f}</div>
     <div class="summary-sub">累計隔夜利息</div>
   </div>
 </div>'''
@@ -156,7 +156,7 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 </style></head><body>
 <div class="header"><h1>MT Desk v6.1 — {ACCOUNT}</h1>
 <div style="display:flex;align-items:center;gap:12px">
-  <div class="meta"><span id="headerCount">{COUNT}</span> 筆交易 · P/L: <b id="headerPL" style="color:{PL_COLOR}">{PL}</b> · 勝率: <b id="headerWR">{WR}</b></div>
+  <div class="meta"><span id="headerCount">{COUNT}</span> 筆交易 · P/L: <b id="headerPL" style="color:{PL_COLOR}">{PL}</b> · 獲利佔比: <b id="headerWR">{WR}</b></div>
   <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌓</button>
 </div></div>
 <div class="date-bar">
@@ -322,11 +322,11 @@ function initAllCharts(){
     xAxis:{type:'category',data:ses.labels,axisLabel:{fontSize:10},name:'交易時段 (伺服器時間)',nameTextStyle:{fontSize:9,color:tc}},
     yAxis:[
       {type:'value',name:'筆數',nameTextStyle:{fontSize:9,color:tc}},
-      {type:'value',name:'勝率 %',nameTextStyle:{fontSize:9,color:tc},axisLabel:{formatter:'{value}%'}}
+      {type:'value',name:'獲利佔比 %',nameTextStyle:{fontSize:9,color:tc},axisLabel:{formatter:'{value}%'}}
     ],
     series:[
       {name:'交易筆數',type:'bar',data:ses.cnt,itemStyle:{color:'#448aff'},barWidth:'50%',label:{show:true,position:'inside',fontSize:10,color:'#fff'}},
-      {name:'勝率',type:'line',yAxisIndex:1,data:ses.wr,itemStyle:{color:'#fac858'},symbol:'circle',symbolSize:8,label:{show:true,formatter:function(p){return p.value+'%';},fontSize:10,color:tc}}
+      {name:'獲利佔比',type:'line',yAxisIndex:1,data:ses.wr,itemStyle:{color:'#fac858'},symbol:'circle',symbolSize:8,label:{show:true,formatter:function(p){return p.value+'%';},fontSize:10,color:tc}}
     ]
   }},isDark);
 }
@@ -391,6 +391,10 @@ function updateChartsFromFilter(){
   // Update symbol pie
   var symCount={};data.forEach(function(t){symCount[t.symbol]=(symCount[t.symbol]||0)+1;});SYM_PIE_DATA=Object.keys(symCount).map(function(s){return{name:s,value:symCount[s]};});
   initAllCharts();
+  // Update summary cards (volume + swap)
+  var totalVol=0,totalSwap=0;data.forEach(function(t){totalVol+=t.volume||0;totalSwap+=t.swap||0;});
+  var sv=document.getElementById('summaryVolume');if(sv)sv.textContent=totalVol.toFixed(2)+' 手';
+  var ss=document.getElementById('summarySwap');if(ss){ss.textContent='$'+(totalSwap>=0?'+':'')+totalSwap.toFixed(2);ss.style.color=totalSwap>=0?'#00e676':'#ff5252';}
 }
 var sortCol='profit',sortDir=-1;var currentPage=1,pageSize=15,totalPages=1;var searchIdx=-1,searchMatches=[];
 function sortBy(col){if(sortCol===col)sortDir*=-1;else{sortCol=col;sortDir=-1;}data.sort(function(a,b){var va=a[col],vb=b[col];if(typeof va==='number')return(va-vb)*sortDir;return String(va).localeCompare(String(vb))*sortDir;});currentPage=1;renderTable();document.querySelectorAll('.sort-arrow').forEach(function(el){el.textContent='';});var arrow=document.getElementById('sa-'+col);if(arrow)arrow.textContent=sortDir>0?'▲':'▼';}
@@ -405,8 +409,8 @@ renderTable();document.getElementById('sa-profit').textContent='▼';</script>
 <div style="margin-top:10px;font-size:12px;color:var(--muted);line-height:1.8">
 <p><b>總交易</b>：報表中所有已平倉交易的總筆數。</p>
 <p><b>總盈虧</b>：所有交易 profit 欄位的代數和（盈利 − 虧損 − 佣金 − Swap）。</p>
-<p><b>勝率</b>：盈利筆數 ÷ 總筆數 × 100%。高勝率不等於賺錢 — 如果平均虧損遠大於平均盈利，仍然會虧損。</p>
-<p><b>平均盈利</b>：所有盈利交易 profit 的平均值。這個值小 + 平均虧損大 = 高勝率但虧錢。</p>
+<p><b>獲利佔比</b>：盈利筆數 ÷ 總筆數 × 100%。高獲利佔比不等於賺錢 — 如果平均虧損遠大於平均盈利，仍然會虧損。</p>
+<p><b>平均盈利</b>：所有盈利交易 profit 的平均值。這個值小 + 平均虧損大 = 高獲利佔比但虧錢。</p>
 <p><b>平均虧損</b>：所有虧損交易 profit 絕對值的平均值。</p>
 <p><b>盈虧比</b>：平均盈利 ÷ 平均虧損。<b style="color:var(--green)">≥1</b> 表示盈利時賺的比虧損時賠的多；<b style="color:var(--red)">&lt;1</b> 表示虧損時賠的比盈利時賺的多。這是判斷策略品質的核心指標。</p>
 <p><b>盈利因子</b>：總盈利 ÷ 總虧損絕對值。<b style="color:var(--red)">&lt;1</b> 是虧損策略。</p>
