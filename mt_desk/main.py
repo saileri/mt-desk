@@ -150,24 +150,34 @@ table{width:100%;border-collapse:collapse;font-size:clamp(10px,0.8vw,13px)}
 th{background:var(--surface);padding:clamp(6px,0.5vw,8px) clamp(8px,0.7vw,12px);text-align:left;font-weight:600;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap;color:var(--muted);font-size:clamp(9px,0.7vw,11px)}
 th:hover{color:var(--text)}th .sort-arrow{font-size:8px;margin-left:3px;color:var(--blue)}
 td{padding:clamp(4px,0.4vw,6px) clamp(8px,0.7vw,12px);border-bottom:1px solid var(--border);color:var(--text)}
-tr:hover td{background:var(--surface)}.win{color:var(--green)!important}.loss{color:var(--red)!important}
+tr:hover td{background:var(--surface)}.win,.win td{color:var(--green)!important}.loss,.loss td{color:var(--red)!important}.win td{background:rgba(0,230,118,0.07)}.loss td{background:rgba(255,82,82,0.07)}
 tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
+.summary-line{font-size:clamp(11px,0.9vw,14px);color:var(--text);margin-bottom:clamp(10px,1vw,16px);padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);line-height:1.6}
+.summary-line b{color:var(--blue)}.summary-line .pos{color:var(--green)}.summary-line .neg{color:var(--red)}
+.quick-btn{padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--muted);cursor:pointer;font-size:clamp(9px,0.7vw,11px);font-family:inherit}.quick-btn:hover{border-color:var(--blue);color:var(--text)}.quick-btn.active{border-color:var(--blue);color:var(--blue);background:rgba(68,138,255,0.1)}
 @media(max-width:768px){.summary-row{grid-template-columns:1fr 1fr}.chart-grid{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(3,1fr)}}
 </style></head><body>
 <div class="header"><h1>MT Desk v6.1 — {ACCOUNT}</h1>
 <div style="display:flex;align-items:center;gap:12px">
   <div class="meta"><span id="headerCount">{COUNT}</span> 筆交易 · P/L: <b id="headerPL" style="color:{PL_COLOR}">{PL}</b> · 獲利佔比: <b id="headerWR">{WR}</b></div>
   <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌓</button>
+  <button class="theme-btn" onclick="window.print()" title="列印報告">🖨️</button>
 </div></div>
 <div class="date-bar">
-  <span class="lbl">📅 篩選日期:</span>
+  <span class="lbl">📅 快速:</span>
+  <button class="quick-btn" onclick="quickFilter('today')">今日</button>
+  <button class="quick-btn" onclick="quickFilter('week')">本週</button>
+  <button class="quick-btn" onclick="quickFilter('month')">本月</button>
+  <button class="quick-btn" onclick="quickFilter('3m')">近三月</button>
+  <button class="quick-btn" onclick="quickFilter('all')">全部</button>
+  <span class="lbl" style="margin-left:12px">自訂:</span>
   <input type="date" id="dateFrom" value="{DATE_MIN}" onchange="applyDateFilter()">
   <span class="lbl">至</span>
   <input type="date" id="dateTo" value="{DATE_MAX}" onchange="applyDateFilter()">
   <button onclick="resetDateFilter()">重置</button>
   <span class="lbl" id="filterInfo"></span>
 </div>
-<div class="main"><div class="kpi-row" id="kpiRow">{CARDS}</div>
+<div class="main"><div id="summaryLine" class="summary-line"></div><div class="kpi-row" id="kpiRow">{CARDS}</div>
 {SUMMARY}
 <!-- ══════ v6.1: Long-Term Trading Habit Analysis ══════ -->
 <div class="section-title">📊 交易習慣分析</div>
@@ -264,6 +274,8 @@ function initAllCharts(){
     tooltip:{trigger:'item',formatter:'{b}: {c} 筆 ({d}%)'},legend:{bottom:0,textStyle:{color:tc,fontSize:10}},color:C10,
     series:[{type:'pie',radius:['45%','75%'],center:['50%','48%'],avoidLabelOverlap:false,label:{show:true,formatter:'{b} {d}%',fontSize:10,color:tc},data:SYM_PIE_DATA,emphasis:{scale:false}}]
   }},isDark);
+  // Pie click → filter table by symbol
+  var pieEl=document.getElementById('chart-symbol-pie');if(pieEl&&pieEl._ec){pieEl._ec.off('click');pieEl._ec.on('click',function(params){if(params.name)filterBySymbol(params.name);});}
   // 1. Monthly P&L
   var mp=CHART_MONTHLY_PL;
   ecOpt({id:'chart-monthly-pl',opt:{
@@ -358,14 +370,23 @@ function updateKPIs(){
   data.forEach(function(t){pl+=t.profit;if(t.profit>0){wins++;totalW+=t.profit;}else{losses++;totalL+=t.profit;}if(t.profit>best)best=t.profit;if(t.profit<worst)worst=t.profit;});
   var avgW=wins?(totalW/wins):0,avgL=losses?Math.abs(totalL/losses):0,plr=avgL?avgW/avgL:0;
   var pf=totalL?Math.abs(totalW/totalL):0;
+  // Max drawdown
+  var sorted=data.slice().sort(function(a,b){return a.open<b.open?-1:1;});
+  var peak=0,maxdd=0,cumDD=0;
+  sorted.forEach(function(t){cumDD+=t.profit;if(cumDD>peak)peak=cumDD;var dd=peak-cumDD;if(dd>maxdd)maxdd=dd;});
+  // Sharpe (simplified daily)
+  var daily={};data.forEach(function(t){var d=t.open?t.open.substring(0,10):'';if(d)daily[d]=(daily[d]||0)+t.profit;});
+  var dv=Object.values(daily),sharpe=0;if(dv.length>1){var mean=dv.reduce(function(a,b){return a+b;},0)/dv.length;var variance=dv.reduce(function(a,b){return a+Math.pow(b-mean,2);},0)/dv.length;var std=Math.sqrt(variance);if(std>0)sharpe=mean/std*Math.sqrt(252);}
   document.getElementById('headerCount').textContent=total;
   document.getElementById('headerPL').textContent='$'+(pl>=0?'+':'')+pl.toFixed(2);
   document.getElementById('headerWR').textContent=(total?(wins/total*100).toFixed(0):0)+'%';
   var vals=[total,'$'+(pl>=0?'+':'')+pl.toFixed(2),(total?(wins/total*100).toFixed(0):0)+'%',
     '+$'+avgW.toFixed(2),'-$'+avgL.toFixed(2),plr.toFixed(2),pf.toFixed(2),
-    'N/A','N/A','$'+(best!==-Infinity?'+':'')+best.toFixed(2),'$-'+Math.abs(worst).toFixed(2)];
+    '$'+maxdd.toFixed(2),(sharpe||0).toFixed(2),'$'+(best!==-Infinity?'+':'')+best.toFixed(2),'$-'+Math.abs(worst).toFixed(2)];
   var kpiVals=document.querySelectorAll('.kpi .val');
   for(var i=0;i<Math.min(vals.length,kpiVals.length);i++){kpiVals[i].textContent=vals[i];}
+  // Summary line
+  updateSummaryLine(total,wins,pl);
 }
 function updateChartsFromFilter(){
   // Recompute chart data from filtered `data` array
@@ -396,13 +417,35 @@ function updateChartsFromFilter(){
   var sv=document.getElementById('summaryVolume');if(sv)sv.textContent=totalVol.toFixed(2)+' 手';
   var ss=document.getElementById('summarySwap');if(ss){ss.textContent='$'+(totalSwap>=0?'+':'')+totalSwap.toFixed(2);ss.style.color=totalSwap>=0?'#00e676':'#ff5252';}
 }
+function updateSummaryLine(total,wins,pl){
+  var sl=document.getElementById('summaryLine');if(!sl)return;
+  var wr=total?(wins/total*100).toFixed(1):'0.0';
+  var cs=pl>=0?'pos':'neg';
+  sl.innerHTML='📋 篩選結果：<b>'+total+'</b> 筆交易，<b class=\"'+cs+'\">'+wins+'</b> 筆獲利（獲利佔比 <b>'+wr+'%</b>），淨盈虧 <b class=\"'+cs+'\">$'+(pl>=0?'+':'')+pl.toFixed(2)+'</b>';
+}
+function quickFilter(period){
+  var now=new Date();var df='',dt=now.toISOString().substring(0,10);
+  var d=new Date(now);
+  if(period==='today'){df=dt;}
+  else if(period==='week'){d.setDate(d.getDate()-d.getDay());df=d.toISOString().substring(0,10);}
+  else if(period==='month'){df=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01';}
+  else if(period==='3m'){d.setMonth(d.getMonth()-3);df=d.toISOString().substring(0,10);}
+  else{df='{DATE_MIN}';dt='{DATE_MAX}';}
+  document.getElementById('dateFrom').value=df;document.getElementById('dateTo').value=dt;
+  document.querySelectorAll('.quick-btn').forEach(function(b){b.classList.remove('active');});
+  if(event&&event.target)event.target.classList.add('active');
+  applyDateFilter();
+}
+function filterBySymbol(sym){
+  document.getElementById('searchBox').value=sym;doSearch();
+}
 var sortCol='profit',sortDir=-1;var currentPage=1,pageSize=15,totalPages=1;var searchIdx=-1,searchMatches=[];
 function sortBy(col){if(sortCol===col)sortDir*=-1;else{sortCol=col;sortDir=-1;}data.sort(function(a,b){var va=a[col],vb=b[col];if(typeof va==='number')return(va-vb)*sortDir;return String(va).localeCompare(String(vb))*sortDir;});currentPage=1;renderTable();document.querySelectorAll('.sort-arrow').forEach(function(el){el.textContent='';});var arrow=document.getElementById('sa-'+col);if(arrow)arrow.textContent=sortDir>0?'▲':'▼';}
 function doSearch(){var q=document.getElementById('searchBox').value.trim().toLowerCase();searchMatches=[];searchIdx=-1;if(!q){data=applyCurrentFilter();document.getElementById('searchInfo').textContent='';}else{data=applyCurrentFilter().filter(function(t){return String(t.ticket).toLowerCase().indexOf(q)>=0;});document.getElementById('searchInfo').textContent=data.length+' 條匹配';ALL_TRADES.forEach(function(t,i){if(String(t.ticket).toLowerCase().indexOf(q)>=0)searchMatches.push(i);});}currentPage=1;renderTable();}
 function applyCurrentFilter(){var df=document.getElementById('dateFrom').value;var dt=document.getElementById('dateTo').value;if(!df&&!dt)return ALL_TRADES.slice();return ALL_TRADES.filter(function(t){if(df&&t.open_date<df)return false;if(dt&&t.open_date>dt)return false;return true;});}
 document.getElementById('searchBox').addEventListener('keydown',function(e){if(e.key==='Enter'&&searchMatches.length>0){e.preventDefault();searchIdx=(searchIdx+1)%searchMatches.length;var gi=searchMatches[searchIdx];currentPage=Math.floor(gi/pageSize)+1;renderTable();setTimeout(function(){var rows=document.querySelectorAll('#tradeBody tr');rows.forEach(function(r){r.classList.remove('highlight');});var li=gi%pageSize;if(rows[li]){rows[li].classList.add('highlight');rows[li].scrollIntoView({behavior:'smooth',block:'center'});}document.getElementById('searchInfo').textContent=(searchIdx+1)+'/'+searchMatches.length+' 條匹配';},30);}});
 function renderTable(){totalPages=Math.ceil(data.length/pageSize)||1;if(currentPage>totalPages)currentPage=totalPages;var start=(currentPage-1)*pageSize;var page=data.slice(start,start+pageSize);var h='';page.forEach(function(t){var cls=t.profit>0?'win':'loss';h+='<tr class=\"'+cls+'\"><td>'+t.ticket+'</td><td>'+t.open+'</td><td>'+t.type+'</td><td>'+t.volume+'</td><td>'+t.symbol+'</td><td>'+(t.open_price||'-')+'</td><td>'+(t.sl||'-')+'</td><td>'+(t.tp||'-')+'</td><td>'+t.close+'</td><td>'+(t.close_price||'-')+'</td><td>$'+(t.commission||0).toFixed(2)+'</td><td>$'+(t.swap||0).toFixed(2)+'</td><td class=\"'+cls+'\">$'+t.profit.toFixed(2)+'</td></tr>';});document.getElementById('tradeBody').innerHTML=h;var info=currentPage+'/'+totalPages+' ('+data.length+'筆)';document.getElementById('pageInfo').textContent=info;document.getElementById('pageInfo2').textContent=info;}
-renderTable();document.getElementById('sa-profit').textContent='▼';</script>
+renderTable();document.getElementById('sa-profit').textContent='▼';updateSummaryLine(ALL_TRADES.length,ALL_TRADES.filter(function(t){return t.profit>0;}).length,ALL_TRADES.reduce(function(a,t){return a+t.profit;},0));</script>
 <div class="metric-guide" style="max-width:1440px;margin:20px auto 0;padding:0 clamp(10px,1vw,20px) 20px">
 <details style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;cursor:pointer">
 <summary style="font-size:13px;font-weight:600;color:var(--text);outline:none">📖 指標說明與計算公式</summary>
