@@ -77,17 +77,18 @@ def build_dashboard_html(account,trades,stats):
     <div id="chart-swap-bar" style="width:100%;height:200px"></div>
   </div>
 </div>'''
-    # ── v6.1: 6 long-term habit analysis charts ──
-    # 1. Monthly P&L bar
+    # ── v6.1: Long-term habit analysis charts ──
+    # 1. Monthly P&L → Waterfall chart
     monthly=sorted(stats["monthly"].items());m_labels=[m[0] for m in monthly];m_data=[round(m[1],2) for m in monthly]
-    monthly_pl_json=_j({"labels":m_labels,"data":m_data})
+    m_base=[];cum=0
+    for v in m_data: m_base.append(round(cum,2));cum+=v
+    waterfall_json=_j({"labels":m_labels,"delta":m_data,"base":m_base,"total":round(cum,2)})
     # 2. Long/Short monthly stacked bar
     ls=sorted(stats["ls_monthly"].items());ls_labels=[m[0] for m in ls]
     ls_long=[m[1]["long"] for m in ls];ls_short=[m[1]["short"] for m in ls]
     ls_monthly_json=_j({"labels":ls_labels,"long":ls_long,"short":ls_short})
     # 3. Quarterly symbol stacked bar
     qs=sorted(stats["quarterly_sym"].items());qs_labels=[q[0] for q in qs]
-    # Collect all symbols across quarters
     all_syms=set();[all_syms.update(q[1].keys()) for q in qs]
     top_syms=sorted(all_syms,key=lambda s:sum(stats["sym_count"].get(s.lower(),0) for _ in [1]),reverse=True)[:6]
     qs_series=[{"name":s,"data":[q[1].get(s,0) for q in qs]} for s in top_syms]
@@ -95,13 +96,10 @@ def build_dashboard_html(account,trades,stats):
     # 4. Cumulative equity curve
     eq=stats["equity"];eq_dates=stats["equity_dates"]
     equity_json=_j({"dates":eq_dates,"equity":eq,"pl":stats["total_pl"]})
-    # 5. Holding duration distribution
-    dur_keys=list(stats["dur_buckets"].keys());dur_vals=list(stats["dur_buckets"].values())
-    duration_json=_j({"labels":dur_keys,"data":dur_vals})
-    # 6. Session preference
-    ses=stats["session"];ses_labels=list(ses.keys());ses_cnt=[ses[k]["cnt"] for k in ses_labels]
-    ses_wr=[round(ses[k]["wins"]/ses[k]["cnt"]*100,0) if ses[k]["cnt"]>0 else 0 for k in ses_labels]
-    session_json=_j({"labels":ses_labels,"cnt":ses_cnt,"wr":ses_wr})
+    # 5. Holding duration → scatter (computed in JS from ALL_TRADES)
+    duration_json="null"  # placeholder, scatter uses raw trade data
+    # 6. Session → heatmap (computed in JS from ALL_TRADES)
+    session_json="null"
 
     # ── v6.2: CSV-only charts (R-Multiple, Asset Class, CSV Session) ──
     r_multiples=stats.get("r_multiples",[])
@@ -158,7 +156,7 @@ def build_dashboard_html(account,trades,stats):
     html=html.replace("{SWAP_JSON}",sw_json)
     html=html.replace("{DATE_MIN}",date_min).replace("{DATE_MAX}",date_max)
     # v6.1 chart JSON
-    html=html.replace("{MONTHLY_PL_JSON}",monthly_pl_json)
+    html=html.replace("{WATERFALL_JSON}",waterfall_json)
     html=html.replace("{LS_MONTHLY_JSON}",ls_monthly_json)
     html=html.replace("{QUARTERLY_SYM_JSON}",quarterly_sym_json)
     html=html.replace("{EQUITY_JSON}",equity_json)
@@ -204,8 +202,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 .chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:10px 12px 4px}
 .chart-box .axis-hint{font-size:9px;color:var(--muted);text-align:right;margin-top:-6px;margin-bottom:2px;padding-right:4px}
 #chart-symbol-pie{cursor:pointer}
+.chart-title{font-size:13px;font-weight:600;color:var(--text);padding:2px 0 0 2px;display:flex;align-items:center;gap:6px}
+.chart-title-sub{font-size:10px;font-weight:400;color:var(--muted)}
 .chart-tag{display:inline-block;font-size:9px;padding:1px 6px;border-radius:3px;margin-right:4px;vertical-align:middle;font-weight:500}
 .chart-tag.x{background:var(--muted);color:var(--bg);opacity:.7}.chart-tag.y{background:var(--blue);color:#fff;opacity:.7}
+/* Badge styles for table */
+.badge-dir{display:inline-block;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:600;letter-spacing:0.3px}
+.badge-buy{background:rgba(5,150,105,0.15);color:#34d399}
+.badge-sell{background:rgba(220,38,38,0.15);color:#f87171}
+td.num{text-align:right;font-family:'JetBrains Mono','SF Mono','Consolas',monospace;font-size:clamp(9px,0.7vw,12px)}
+td.fade{color:var(--muted);opacity:0.4}
+tr.zebra td{background:rgba(255,255,255,0.015)}
+tr:hover td{background:var(--surface)!important}
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
 .toolbar input{padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:clamp(10px,0.8vw,13px);outline:none;background:var(--surface);color:var(--text);font-family:inherit;transition:border-color .2s;width:clamp(140px,18vw,200px)}
 .toolbar input:focus{border-color:var(--blue)}.toolbar input::placeholder{color:var(--muted)}
@@ -225,7 +233,7 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 @media(max-width:768px){.summary-row{grid-template-columns:1fr 1fr}.chart-grid{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(3,1fr)}}
 @media print{@page{margin:12mm}.header,.date-bar,.toolbar,.theme-btn,.metric-guide{display:none!important}.chart-box{break-inside:avoid;page-break-inside:avoid}.table-wrap{overflow-x:visible}body{font-size:10pt;background:#fff!important;color:#000!important}.kpi{border:1px solid #ccc!important;background:#fff!important;box-shadow:none}.kpi .val{font-size:14pt}.kpi .lbl,.kpi .tip{color:#666!important}.chart-grid{grid-template-columns:1fr}.section-title{color:#000!important;border-bottom:1px solid #999}.summary-line{background:#f5f5f5!important;border:1px solid #ccc}}
 </style></head><body>
-<div class="header"><h1>MT Desk v6.3.0 — {ACCOUNT}</h1>
+<div class="header"><h1>MT Desk v6.3.1 — {ACCOUNT}</h1>
 <div style="display:flex;align-items:center;gap:12px">
   <div class="meta"><span id="headerCount">{COUNT}</span> 筆交易 · P/L: <b id="headerPL" style="color:{PL_COLOR}">{PL}</b> · 獲利佔比: <b id="headerWR">{WR}</b></div>
   <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌓</button>
@@ -251,28 +259,28 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 <div class="section-title">📊 交易習慣分析</div>
 <div class="chart-grid">
   <div class="chart-box">
-    <span class="chart-tag x">X：月份</span><span class="chart-tag y">Y：$ USD</span>
-    <div id="chart-monthly-pl" style="width:100%;height:300px"></div>
+    <div class="chart-title">月度盈虧瀑布圖 <span class="chart-title-sub">逐月貢獻推疊</span></div>
+    <div id="chart-waterfall" style="width:100%;height:280px"></div>
   </div>
   <div class="chart-box">
-    <span class="chart-tag x">X：月份</span><span class="chart-tag y">Y：筆數</span>
-    <div id="chart-ls-monthly" style="width:100%;height:300px"></div>
+    <div class="chart-title">多空分佈 <span class="chart-title-sub">按月看多空筆數</span></div>
+    <div id="chart-ls-monthly" style="width:100%;height:280px"></div>
   </div>
   <div class="chart-box">
-    <span class="chart-tag x">X：季度</span><span class="chart-tag y">Y：筆數</span>
-    <div id="chart-quarterly-sym" style="width:100%;height:300px"></div>
+    <div class="chart-title">季度品種偏好 <span class="chart-title-sub">按季度看品種活躍度</span></div>
+    <div id="chart-quarterly-sym" style="width:100%;height:280px"></div>
   </div>
   <div class="chart-box">
-    <span class="chart-tag x">X：持倉時間區間</span><span class="chart-tag y">Y：筆數</span>
-    <div id="chart-duration" style="width:100%;height:300px"></div>
+    <div class="chart-title">持倉時間 vs 盈虧 <span class="chart-title-sub">每筆交易 = 一個點</span></div>
+    <div id="chart-scatter" style="width:100%;height:280px"></div>
   </div>
   <div class="chart-box">
-    <span class="chart-tag x">X：日期</span><span class="chart-tag y">Y：$ USD 累計</span>
-    <div id="chart-equity" style="width:100%;height:300px"></div>
+    <div class="chart-title">權益曲線 <span class="chart-title-sub">累計盈虧走勢</span></div>
+    <div id="chart-equity" style="width:100%;height:280px"></div>
   </div>
   <div class="chart-box">
-    <span class="chart-tag x">X：交易時段</span><span class="chart-tag y">Y：筆數</span>
-    <div id="chart-session" style="width:100%;height:300px"></div>
+    <div class="chart-title">週內交易熱力圖 <span class="chart-title-sub">星期×時段盈虧熱度</span></div>
+    <div id="chart-heatmap" style="width:100%;height:280px"></div>
   </div>
 </div>
 <!-- ══════ v6.2: CSV-Enhanced Charts (R-Multiple, Asset Class) ══════ -->
@@ -327,7 +335,7 @@ var SWAP_DATA={SWAP_JSON};
 var data=ALL_TRADES.slice();
 
 // ── v6.1 chart data ──
-var CHART_MONTHLY_PL={MONTHLY_PL_JSON};
+var CHART_WATERFALL={WATERFALL_JSON};
 var CHART_LS_MONTHLY={LS_MONTHLY_JSON};
 var CHART_QUARTERLY_SYM={QUARTERLY_SYM_JSON};
 var CHART_EQUITY={EQUITY_JSON};
@@ -410,17 +418,21 @@ function initAllCharts(){
     yAxis:{type:'category',data:swNames,axisLabel:{fontSize:9}},
     series:[{type:'bar',data:swVals.map(function(v){return{value:v,itemStyle:{color:v>=0?'#059669':'#dc2626'}};}),barWidth:'60%'}]
   }},isDark);
-  // Pie click → filter table by symbol
-  var pieEl=document.getElementById('chart-symbol-pie');if(pieEl&&pieEl._ec){pieEl._ec.off('click');pieEl._ec.on('click',function(params){if(params.name)filterBySymbol(params.name);});}
-  // 1. Monthly P&L
-  var mp=CHART_MONTHLY_PL;
-  ecOpt({id:'chart-monthly-pl',opt:{
-    tooltip:{trigger:'axis',formatter:function(p){return p[0].name+'<br/>盈虧: $'+p[0].value.toFixed(2);}},
-    grid:{left:65,right:15,top:10,bottom:35},color:['#059669'],
-    xAxis:{type:'category',data:mp.labels,axisLabel:{fontSize:9,rotate:30,interval:Math.max(1,Math.floor(mp.labels.length/8))},name:'月份',nameTextStyle:{fontSize:9,color:tc}},
-    yAxis:{type:'value',axisLabel:{formatter:'$ {value}'},name:'$ USD',nameTextStyle:{fontSize:9,color:tc}},
-    series:[{type:'bar',data:mp.data.map(function(v){return{value:v,itemStyle:{color:v>=0?'#059669':'#dc2626'}};}),barWidth:'60%'}]
-  }},isDark);
+  // ── 1. Waterfall: Monthly P&L ──
+  var wf=CHART_WATERFALL;
+  if(wf&&wf.labels&&wf.labels.length){
+    ecOpt({id:'chart-waterfall',opt:{
+      tooltip:{trigger:'axis',formatter:function(p){var i=p[0].dataIndex;return wf.labels[i]+'<br/>盈虧: <b>$'+wf.delta[i].toFixed(2)+'</b>';}},
+      grid:{left:60,right:40,top:12,bottom:35},
+      xAxis:{type:'category',data:wf.labels,axisLabel:{fontSize:9,rotate:30,interval:Math.max(1,Math.floor(wf.labels.length/8))}},
+      yAxis:{type:'value',axisLabel:{fontSize:9,formatter:'${value}'}},
+      series:[
+        {type:'bar',stack:'wf',data:wf.base,barWidth:'60%',itemStyle:{color:'transparent'},emphasis:{itemStyle:{color:'transparent'}}},
+        {type:'bar',stack:'wf',data:wf.delta.map(function(v){return{value:v,itemStyle:{color:v>=0?'#34d399':'#f87171',borderRadius:[v>=0?0:0,0,v>=0?0:0,v>=0?0:0]}};}),barWidth:'60%',
+          label:{show:true,position:'outside',fontSize:9,formatter:function(p){return '$'+p.value.toFixed(0);},color:tc}}
+      ]
+    }},isDark);
+  }
   // 2. Long/Short monthly
   var ls=CHART_LS_MONTHLY;
   ecOpt({id:'chart-ls-monthly',opt:{
@@ -443,15 +455,26 @@ function initAllCharts(){
     legend:{bottom:0,textStyle:{fontSize:9,color:tc}},color:C10,
     series:qsSeries
   }},isDark);
-  // 4. Holding duration
-  var dur=CHART_DURATION;
-  ecOpt({id:'chart-duration',opt:{
-    tooltip:{trigger:'axis',formatter:function(p){return p[0].name+'<br/>'+p[0].value+' 筆';}},
-    grid:{left:65,right:15,top:10,bottom:25},color:['#448aff'],
-    xAxis:{type:'category',data:dur.labels,axisLabel:{fontSize:10},name:'持倉時間',nameTextStyle:{fontSize:9,color:tc}},
-    yAxis:{type:'value',name:'筆數',nameTextStyle:{fontSize:9,color:tc}},
-    series:[{type:'bar',data:dur.data.map(function(v,i){return{value:v,itemStyle:{color:C10[i%10]}};}),barWidth:'60%',label:{show:true,position:'top',fontSize:10,color:tc}}]
-  }},isDark);
+  // 4. Scatter: Holding duration vs PnL
+  var scatterData=ALL_TRADES.filter(function(t){return t.open&&t.close&&t.volume>0;}).map(function(t){
+    var durH=(new Date(t.close)-new Date(t.open))/3600000;
+    return[durH,t.profit,t.type,t.symbol];
+  });
+  if(scatterData.length){
+    ecOpt({id:'chart-scatter',opt:{
+      tooltip:{trigger:'item',formatter:function(p){
+        var d=p.data;return d[3]+'<br/>持倉: '+d[0].toFixed(1)+'h<br/>盈虧: $'+d[1].toFixed(2);
+      }},
+      grid:{left:60,right:20,top:10,bottom:30},
+      xAxis:{type:'value',name:'持倉時間 (小時)',nameTextStyle:{fontSize:9,color:tc},axisLabel:{fontSize:9},splitLine:{show:false}},
+      yAxis:{type:'value',name:'盈虧 $',nameTextStyle:{fontSize:9,color:tc},axisLabel:{fontSize:9,formatter:'${value}'}},
+      series:[{
+        type:'scatter',symbolSize:function(v){return Math.max(4,Math.min(12,Math.abs(v[1])/10));},
+        data:scatterData,
+        itemStyle:{color:function(p){return p.data[2]==='BUY'?'#34d399':'#f87171';},opacity:0.7}
+      }]
+    }},isDark);
+  }
   // 5. Equity curve
   var eq=CHART_EQUITY;
   ecOpt({id:'chart-equity',opt:{
@@ -462,21 +485,32 @@ function initAllCharts(){
     series:[{type:'line',data:eq.equity,smooth:true,symbol:'none',lineStyle:{color:eq.pl>=0?'#059669':'#dc2626',width:2},
       areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:eq.pl>=0?'rgba(5,150,105,0.2)':'rgba(220,38,38,0.2)'},{offset:1,color:'rgba(0,0,0,0)'}]}}}]
   }},isDark);
-  // 6. Session preference
-  var ses=CHART_SESSION;
-  ecOpt({id:'chart-session',opt:{
-    tooltip:{trigger:'axis'},
-    grid:{left:45,right:55,top:10,bottom:20},
-    xAxis:{type:'category',data:ses.labels,axisLabel:{fontSize:10},name:'交易時段 (伺服器時間)',nameTextStyle:{fontSize:9,color:tc}},
-    yAxis:[
-      {type:'value',name:'筆數',nameTextStyle:{fontSize:9,color:tc}},
-      {type:'value',name:'獲利佔比 %',nameTextStyle:{fontSize:9,color:tc},axisLabel:{formatter:'{value}%'}}
-    ],
-    series:[
-      {name:'交易筆數',type:'bar',data:ses.cnt,itemStyle:{color:'#448aff'},barWidth:'50%',label:{show:true,position:'inside',fontSize:10,color:'#fff'}},
-      {name:'獲利佔比',type:'line',yAxisIndex:1,data:ses.wr,itemStyle:{color:'#fac858'},symbol:'circle',symbolSize:8,label:{show:true,formatter:function(p){return p.value+'%';},fontSize:10,color:tc}}
-    ]
-  }},isDark);
+  // 6. Heatmap: Weekday x Hour PnL
+  var days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var hours=['0-2','2-4','4-6','6-8','8-10','10-12','12-14','14-16','16-18','18-20','20-22','22-24'];
+  var hmData=[];
+  ALL_TRADES.forEach(function(t){
+    if(!t.open)return;
+    var dt=new Date(t.open);var day=dt.getDay();var h=dt.getHours();
+    var hBin=Math.floor(h/2);
+    hmData.push([day,hBin,t.profit]);
+  });
+  if(hmData.length){
+    // Aggregate: sum PnL per (day, hour_bin)
+    var agg={};hmData.forEach(function(d){var k=d[0]+'-'+d[1];agg[k]=(agg[k]||0)+d[2];});
+    var heatRows=[];var allVals=[];
+    for(var d=1;d<=5;d++){for(var h=0;h<12;h++){
+      var v=agg[d+'-'+h]||0;heatRows.push([d-1,h,Math.round(v*100)/100]);allVals.push(v);
+    }}
+    var maxAbs=Math.max(Math.abs(Math.min.apply(null,allVals)),Math.abs(Math.max.apply(null,allVals)))||1;
+    ecOpt({id:'chart-heatmap',opt:{
+      tooltip:{trigger:'item',formatter:function(p){return days[p.data[0]+1]+' '+hours[p.data[1]]+'<br/>盈虧: $'+p.data[2].toFixed(2);}},
+      grid:{left:60,right:30,top:10,bottom:30},
+      xAxis:{type:'category',data:['Mon','Tue','Wed','Thu','Fri'],axisLabel:{fontSize:10},splitArea:{show:true}},
+      yAxis:{type:'category',data:hours,axisLabel:{fontSize:8},splitArea:{show:true}},
+      visualMap:{min:-maxAbs,max:maxAbs,inRange:{color:['#dc2626','#1a1f2e','#34d399']},calculable:false,orient:'horizontal',left:'center',bottom:0,itemWidth:120,itemHeight:10},
+      series:[{type:'heatmap',data:heatRows,label:{show:true,fontSize:8,color:tc},emphasis:{itemStyle:{shadowBlur:10}}}]}},isDark);
+  }
   // ── v6.2 CSV charts ──
   // 7. R-Multiple distribution
   var rData=CHART_R;
@@ -509,7 +543,7 @@ function initAllCharts(){
   }
 }
 window.addEventListener('resize',function(){
-  ['chart-symbol-pie','chart-volume-donut','chart-swap-bar','chart-monthly-pl','chart-ls-monthly','chart-quarterly-sym','chart-duration','chart-equity','chart-session','chart-r','chart-ac'].forEach(function(id){
+  ['chart-swap-bar','chart-waterfall','chart-ls-monthly','chart-quarterly-sym','chart-scatter','chart-equity','chart-heatmap','chart-r','chart-ac','chart-symbol-bar'].forEach(function(id){
     var el=document.getElementById(id);if(el&&el._ec)el._ec.resize();
   });
 });
@@ -572,12 +606,12 @@ function updateChartsFromFilter(){
     if(t.open){var h=parseInt(t.open.substring(11,13));var sk=h<8?'亞洲盤 00~07':h<16?'倫敦盤 08~15':'紐約盤 16~23';session[sk].cnt++;session[sk].pl+=t.profit;if(t.profit>0)session[sk].wins++;}
   });
   // Update chart globals
-  var mLabels=Object.keys(monthly).sort();CHART_MONTHLY_PL={labels:mLabels,data:mLabels.map(function(k){return Math.round(monthly[k]*100)/100;})};
+  var mLabels=Object.keys(monthly).sort();var mData=mLabels.map(function(k){return Math.round(monthly[k]*100)/100;});
+  var cum=0,mBase=[];mData.forEach(function(v){mBase.push(Math.round(cum*100)/100);cum+=v;});
+  CHART_WATERFALL={labels:mLabels,delta:mData,base:mBase,total:cum};
   var lsLabels=Object.keys(ls_monthly).sort();CHART_LS_MONTHLY={labels:lsLabels,long:lsLabels.map(function(k){return ls_monthly[k].long;}),short:lsLabels.map(function(k){return ls_monthly[k].short;})};
   var qsLabels=Object.keys(quarterly_sym).sort();var allSyms={};qsLabels.forEach(function(q){Object.keys(quarterly_sym[q]).forEach(function(s){allSyms[s]=(allSyms[s]||0)+quarterly_sym[q][s];});});var topSyms=Object.keys(allSyms).sort(function(a,b){return allSyms[b]-allSyms[a];}).slice(0,6);CHART_QUARTERLY_SYM={labels:qsLabels,series:topSyms.map(function(s){return{name:s,data:qsLabels.map(function(q){return quarterly_sym[q][s]||0;})};})};
   CHART_EQUITY={dates:eqDates,equity:eq,pl:cum};
-  CHART_DURATION={labels:Object.keys(dur_buckets),data:Object.values(dur_buckets)};
-  var sesLabels=Object.keys(session);CHART_SESSION={labels:sesLabels,cnt:sesLabels.map(function(k){return session[k].cnt;}),wr:sesLabels.map(function(k){return session[k].cnt>0?Math.round(session[k].wins/session[k].cnt*100):0;})};
   // Update symbol pie
   var symCount={},symVol={},symSwap={};data.forEach(function(t){symCount[t.symbol]=(symCount[t.symbol]||0)+1;symVol[t.symbol]=(symVol[t.symbol]||0)+(t.volume||0);symSwap[t.symbol]=(symSwap[t.symbol]||0)+(t.swap||0);});SYM_BAR_DATA=Object.keys(symCount).map(function(s){return{name:s,count:symCount[s],volume:Math.round(symVol[s]*100)/100};}).sort(function(a,b){return b.count-a.count;});SWAP_DATA=Object.keys(symSwap).map(function(s){return{name:s,value:Math.round(symSwap[s]*100)/100};}).sort(function(a,b){return a.value-b.value;});
   initAllCharts();
@@ -609,7 +643,17 @@ function sortBy(col){if(sortCol===col)sortDir*=-1;else{sortCol=col;sortDir=-1;}d
 function doSearch(){var q=document.getElementById('searchBox').value.trim().toLowerCase();searchMatches=[];searchIdx=-1;if(!q){data=applyCurrentFilter();document.getElementById('searchInfo').textContent='';}else{data=applyCurrentFilter().filter(function(t){return String(t.ticket).toLowerCase().indexOf(q)>=0||String(t.symbol).toLowerCase().indexOf(q)>=0||String(t.open_date).indexOf(q)>=0;});document.getElementById('searchInfo').textContent=data.length+' 條匹配';ALL_TRADES.forEach(function(t,i){if(String(t.ticket).toLowerCase().indexOf(q)>=0||String(t.symbol).toLowerCase().indexOf(q)>=0||String(t.open_date).indexOf(q)>=0)searchMatches.push(i);});}currentPage=1;renderTable();}
 function applyCurrentFilter(){var df=document.getElementById('dateFrom').value;var dt=document.getElementById('dateTo').value;if(!df&&!dt)return ALL_TRADES.slice();return ALL_TRADES.filter(function(t){if(df&&t.open_date<df)return false;if(dt&&t.open_date>dt)return false;return true;});}
 document.getElementById('searchBox').addEventListener('keydown',function(e){if(e.key==='Enter'&&searchMatches.length>0){e.preventDefault();searchIdx=(searchIdx+1)%searchMatches.length;var gi=searchMatches[searchIdx];currentPage=Math.floor(gi/pageSize)+1;renderTable();setTimeout(function(){var rows=document.querySelectorAll('#tradeBody tr');rows.forEach(function(r){r.classList.remove('highlight');});var li=gi%pageSize;if(rows[li]){rows[li].classList.add('highlight');rows[li].scrollIntoView({behavior:'smooth',block:'center'});}document.getElementById('searchInfo').textContent=(searchIdx+1)+'/'+searchMatches.length+' 條匹配';},30);}});
-function renderTable(){totalPages=Math.ceil(data.length/pageSize)||1;if(currentPage>totalPages)currentPage=totalPages;var start=(currentPage-1)*pageSize;var page=data.slice(start,start+pageSize);var h='';page.forEach(function(t){var cls=t.profit>0?'win':'loss';h+='<tr class=\"'+cls+'\"><td>'+t.ticket+'</td><td>'+t.open+'</td><td>'+t.type+'</td><td>'+t.volume+'</td><td>'+t.symbol+'</td><td>'+(t.open_price||'-')+'</td><td>'+(t.sl||'-')+'</td><td>'+(t.tp||'-')+'</td><td>'+t.close+'</td><td>'+(t.close_price||'-')+'</td><td>$'+(t.commission||0).toFixed(2)+'</td><td>$'+(t.swap||0).toFixed(2)+'</td><td class=\"'+cls+'\">$'+t.profit.toFixed(2)+'</td></tr>';});document.getElementById('tradeBody').innerHTML=h;var info=currentPage+'/'+totalPages+' ('+data.length+'筆)';document.getElementById('pageInfo').textContent=info;document.getElementById('pageInfo2').textContent=info;}
+function renderTable(){totalPages=Math.ceil(data.length/pageSize)||1;if(currentPage>totalPages)currentPage=totalPages;var start=(currentPage-1)*pageSize;var page=data.slice(start,start+pageSize);var h='';page.forEach(function(t,i){
+  var rn=start+i+1;var z=rn%2===0?'class="zebra"':'';
+  var badge=t.type==='BUY'?'<span class="badge-dir badge-buy">做多</span>':'<span class="badge-dir badge-sell">做空</span>';
+  var vol=t.volume!==undefined&&t.volume!==null?t.volume.toFixed(2):'<span class="fade">0.00</span>';
+  var sl=t.sl&&t.sl!==0?'<td class="num">'+t.sl.toFixed(5)+'</td>':'<td class="num fade">—</td>';
+  var tp=t.tp&&t.tp!==0?'<td class="num">'+t.tp.toFixed(5)+'</td>':'<td class="num fade">—</td>';
+  var op=t.open_price?'<td class="num">'+t.open_price.toFixed(5)+'</td>':'<td class="num fade">—</td>';
+  var cp=t.close_price?'<td class="num">'+t.close_price.toFixed(5)+'</td>':'<td class="num fade">—</td>';
+  var pCls=t.profit>=0?'profit':'loss';
+  h+='<tr '+z+'><td>'+t.ticket+'</td><td>'+t.open+'</td>'+'<td>'+badge+'</td>'+'<td class="num">'+vol+'</td>'+'<td>'+t.symbol+'</td>'+op+sl+tp+'<td>'+t.close+'</td>'+cp+'<td class="num">$'+(t.commission||0).toFixed(2)+'</td><td class="num">$'+(t.swap||0).toFixed(2)+'</td><td class="num '+pCls+'">$'+t.profit.toFixed(2)+'</td></tr>';
+});document.getElementById('tradeBody').innerHTML=h;var info=currentPage+'/'+totalPages+' ('+data.length+'筆)';document.getElementById('pageInfo').textContent=info;document.getElementById('pageInfo2').textContent=info;}
 renderTable();document.getElementById('sa-profit').textContent='▼';updateSummaryLine(ALL_TRADES.length,ALL_TRADES.filter(function(t){return t.profit>0;}).length,ALL_TRADES.reduce(function(a,t){return a+t.profit;},0));</script>
 <div class="metric-guide" style="max-width:1440px;margin:20px auto 0;padding:0 clamp(10px,1vw,20px) 20px">
 <details style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;cursor:pointer">
@@ -660,10 +704,10 @@ def process_csv_file(path):
     return result,len(trades)
 
 def main():
-    root=tk.Tk();root.title("MT Desk v6.3.0");root.geometry("440x320")
+    root=tk.Tk();root.title("MT Desk v6.3.1");root.geometry("440x320")
     root.configure(bg="#f0f2f5");root.resizable(False,False)
     tk.Label(root,text="MT Desk v6.2.2",font=("Segoe UI",22,"bold"),fg="#2563eb",bg="#f0f2f5").pack(pady=(24,4))
-    tk.Label(root,text="CSV 匯入 + R-Multiple 分析 · 移植自 trading-record-analysis",font=("Segoe UI",10),fg="#6b7280",bg="#f0f2f5").pack(pady=(0,20))
+    tk.Label(root,text="瀑布圖 · 散點圖 · 熱力圖 · 優化表格",font=("Segoe UI",10),fg="#6b7280",bg="#f0f2f5").pack(pady=(0,20))
     status_var=tk.StringVar(value="選擇 HTML 或 CSV 檔案")
     status=tk.Label(root,textvariable=status_var,font=("Segoe UI",9),fg="#6b7280",bg="#f0f2f5");status.pack(pady=(0,14))
     def open_html():
