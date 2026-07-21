@@ -20,19 +20,25 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install PyInstaller
-        run: pip install pyinstaller
+      - name: Install dependencies
+        run: |
+          pip install pyyaml
+          pip install pyinstaller
 
       - name: Build Windows EXE
         run: |
           pyinstaller --onefile --noconsole `
             --name "MT_Desk" `
+            --add-data "mt_desk/config/mt_column_map.yaml;mt_desk/config/" `
+            --add-data "mt_desk/config/app_config.yaml;mt_desk/config/" `
             --hidden-import tkinter `
             --hidden-import tkinter.filedialog `
             --hidden-import tkinter.messagebox `
             --hidden-import mt_desk `
             --hidden-import mt_desk.parser `
             --hidden-import mt_desk.analysis `
+            --hidden-import mt_desk.csv_import `
+            --hidden-import yaml `
             mt_desk/main.py
 
       - name: Verify EXE exists
