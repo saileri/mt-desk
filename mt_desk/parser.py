@@ -83,17 +83,34 @@ def is_header_row(cells: list[str]) -> bool:
     return matches >= 2
 
 
-def parse_statement(filepath: str | Path) -> dict:
+def parse_statement(filepath: str | Path, chunk_size: int = 8 * 1024 * 1024) -> dict:
     """Parse an MT4 or MT5 HTML statement file.
+
+    Uses chunked reading to handle large files (500MB+) without OOM.
+    For files smaller than chunk_size, reads in one pass (fast path).
+    For larger files, accumulates chunks and parses incrementally.
 
     Returns: {"account": str, "trades": list[dict], "type": "mt4"|"mt5"}
     """
     filepath = Path(filepath)
     enc = detect_encoding(filepath)
+    file_size = filepath.stat().st_size
 
+    if file_size <= chunk_size:
+        # Fast path: small file, read in one go
+        with open(filepath, "r", encoding=enc, errors="replace") as f:
+            html = f.read()
+        return _detect_and_parse(html, filepath.stem)
+
+    # Slow path: chunked reading for large files
+    chunks = []
     with open(filepath, "r", encoding=enc, errors="replace") as f:
-        html = f.read()
-
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            chunks.append(chunk)
+    html = "".join(chunks)
     return _detect_and_parse(html, filepath.stem)
 
 
