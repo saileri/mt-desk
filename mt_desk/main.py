@@ -225,7 +225,7 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 @media(max-width:768px){.summary-row{grid-template-columns:1fr 1fr}.chart-grid{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(3,1fr)}}
 @media print{@page{margin:12mm}.header,.date-bar,.toolbar,.theme-btn,.metric-guide{display:none!important}.chart-box{break-inside:avoid;page-break-inside:avoid}.table-wrap{overflow-x:visible}body{font-size:10pt;background:#fff!important;color:#000!important}.kpi{border:1px solid #ccc!important;background:#fff!important;box-shadow:none}.kpi .val{font-size:14pt}.kpi .lbl,.kpi .tip{color:#666!important}.chart-grid{grid-template-columns:1fr}.section-title{color:#000!important;border-bottom:1px solid #999}.summary-line{background:#f5f5f5!important;border:1px solid #ccc}}
 </style></head><body>
-<div class="header"><h1>MT Desk v6.2.2 — {ACCOUNT}</h1>
+<div class="header"><h1>MT Desk v6.3.0 — {ACCOUNT}</h1>
 <div style="display:flex;align-items:center;gap:12px">
   <div class="meta"><span id="headerCount">{COUNT}</span> 筆交易 · P/L: <b id="headerPL" style="color:{PL_COLOR}">{PL}</b> · 獲利佔比: <b id="headerWR">{WR}</b></div>
   <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌓</button>
@@ -660,7 +660,7 @@ def process_csv_file(path):
     return result,len(trades)
 
 def main():
-    root=tk.Tk();root.title("MT Desk v6.2.2");root.geometry("440x320")
+    root=tk.Tk();root.title("MT Desk v6.3.0");root.geometry("440x320")
     root.configure(bg="#f0f2f5");root.resizable(False,False)
     tk.Label(root,text="MT Desk v6.2.2",font=("Segoe UI",22,"bold"),fg="#2563eb",bg="#f0f2f5").pack(pady=(24,4))
     tk.Label(root,text="CSV 匯入 + R-Multiple 分析 · 移植自 trading-record-analysis",font=("Segoe UI",10),fg="#6b7280",bg="#f0f2f5").pack(pady=(0,20))

@@ -1,6 +1,6 @@
 [project]
 name = "mt-desk"
-version = "6.2.2"
+version = "6.3.0"
 description = "MT4/MT5 Trading Analytics Desktop — CSV import + R-Multiple analysis (ported from trading-record-analysis)"
 readme = "README.md"
 requires-python = ">=3.11"
