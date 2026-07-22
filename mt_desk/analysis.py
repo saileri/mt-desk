@@ -1,4 +1,8 @@
-"""Trading statistics and multi-account comparison."""
+"""Trading statistics and multi-account comparison.
+
+v8.0 — Added CS audit mode: cash_flow analysis, scalp detection,
+stop-out identification, close reason attribution, swap burden.
+"""
 
 from __future__ import annotations
 
@@ -7,13 +11,18 @@ from datetime import datetime
 from typing import Any
 
 
-def analyze(trades: list[dict]) -> dict[str, Any] | None:
+def analyze(trades: list[dict], parse_data: dict | None = None) -> dict[str, Any] | None:
     """Compute trading statistics from a list of trade dicts.
+
+    v8.0: Accepts optional *parse_data* (full result from parse_statement)
+    which may contain ``cash_flows`` for CS audit mode.
 
     Returns None if no trades.
     """
     if not trades:
         return None
+
+    cash_flows = (parse_data or {}).get("cash_flows", [])
 
     wins = [t for t in trades if t["profit"] > 0]
     losses = [t for t in trades if t["profit"] <= 0]
@@ -207,7 +216,128 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
             if t["profit"] > 0:
                 session[s]["wins"] += 1
 
+    # ==============================================================
+    # v8.0 — CS Audit Mode metrics
+    # ==============================================================
+
+    # ── 1. Fund & fee metrics ──
+    total_deposit = sum(item["amount"] for item in cash_flows if item.get("amount", 0) > 0)
+    total_withdrawal = abs(sum(item["amount"] for item in cash_flows if item.get("amount", 0) < 0))
+    net_deposit = total_deposit - total_withdrawal
+    total_commission = sum(t.get("commission", 0) for t in trades)
+
+    net_profit = total_pl  # alias for clarity
+    fee_ratio = (
+        (abs(total_swap) + abs(total_commission))
+        / max(abs(net_profit), 1.0)
+        * 100
+    )
+
+    # ── 2. Holding time in seconds (for scalp detection) ──
+    durations_sec: list[float] = []
+    for t in trades:
+        if t["open_time"] and t["close_time"]:
+            durations_sec.append(
+                (t["close_time"] - t["open_time"]).total_seconds()
+            )
+
+    scalp_count = sum(1 for d in durations_sec if d < 60)
+    scalp_ratio = (scalp_count / len(trades)) * 100 if trades else 0
+
+    # Holding time buckets (seconds-based, CS audit granularity)
+    holding_time_buckets: dict[str, int] = {
+        "< 10s": 0,
+        "10s-1m": 0,
+        "1m-5m": 0,
+        "5m-1h": 0,
+        "1h-24h": 0,
+        "> 24h": 0,
+    }
+    for d in durations_sec:
+        if d < 10:
+            holding_time_buckets["< 10s"] += 1
+        elif d < 60:
+            holding_time_buckets["10s-1m"] += 1
+        elif d < 300:
+            holding_time_buckets["1m-5m"] += 1
+        elif d < 3600:
+            holding_time_buckets["5m-1h"] += 1
+        elif d < 86400:
+            holding_time_buckets["1h-24h"] += 1
+        else:
+            holding_time_buckets["> 24h"] += 1
+
+    # ── 3. Close reason attribution ──
+    SL_EPS = 0.0001
+    close_reason_distribution: dict[str, int] = {
+        "Stop Out (爆仓)": 0,
+        "SL (止损)": 0,
+        "TP (止盈)": 0,
+        "Manual (手动/其他)": 0,
+    }
+    for t in trades:
+        comment = (t.get("comment") or "").lower()
+        if any(kw in comment for kw in ("so", "stop out", "so:")):
+            close_reason_distribution["Stop Out (爆仓)"] += 1
+        elif abs(t.get("close_price", 0) - t.get("sl", 0)) <= SL_EPS and t.get("sl", 0) != 0:
+            close_reason_distribution["SL (止损)"] += 1
+        elif abs(t.get("close_price", 0) - t.get("tp", 0)) <= SL_EPS and t.get("tp", 0) != 0:
+            close_reason_distribution["TP (止盈)"] += 1
+        else:
+            close_reason_distribution["Manual (手动/其他)"] += 1
+
+    stop_out_count = close_reason_distribution["Stop Out (爆仓)"]
+
+    # ── 4. CS Timeline — merged event stream ──
+    timeline_items: list[list] = []  # [timestamp, equity_value, event_type, description]
+    cum_equity = 0.0
+
+    # Collect all events with their timestamps
+    events: list[tuple[datetime, str, float, str]] = []
+
+    # Trade closings (converted to timeline points)
+    for t in sorted_trades:
+        if t["close_time"]:
+            cum_equity += t["profit"]
+            reason = ""
+            comment_lower = (t.get("comment") or "").lower()
+            if any(kw in comment_lower for kw in ("so", "stop out", "so:")):
+                reason = "Stop Out"
+            elif abs(t.get("close_price", 0) - t.get("sl", 0)) <= SL_EPS and t.get("sl", 0) != 0:
+                reason = "SL"
+            elif abs(t.get("close_price", 0) - t.get("tp", 0)) <= SL_EPS and t.get("tp", 0) != 0:
+                reason = "TP"
+            events.append((
+                t["close_time"],
+                round(cum_equity, 2),
+                "trade_close",
+                f"{t['type'].upper()} {t['symbol']} ${t['profit']:+,.2f}" + (f" [{reason}]" if reason else ""),
+            ))
+
+    # Cash flows
+    for cf in cash_flows:
+        if cf.get("time"):
+            cf_type_label = "入金" if cf["type"] == "deposit" else "出金"
+            events.append((
+                cf["time"],
+                None,  # equity not applicable for cash_flow timeline
+                cf["type"],
+                f"{cf_type_label} ${cf['amount']:+,.2f} {cf.get('comment', '')}".strip(),
+            ))
+
+    # Sort by time
+    events.sort(key=lambda x: x[0])
+
+    # Build the timeline array for the frontend
+    balance = 0.0
+    for ev in events:
+        ts = ev[0].strftime("%Y-%m-%d %H:%M:%S") if isinstance(ev[0], datetime) else str(ev[0])
+        if ev[2] == "trade_close":
+            balance = ev[1]  # equity value already computed
+        timeline_items.append([ts, balance, ev[2], ev[3]])
+
     return {
+        # Original metrics (unchanged)
         "count": len(trades),
         "wins": len(wins),
         "losses": len(losses),
@@ -250,4 +380,16 @@ def analyze(trades: list[dict]) -> dict[str, Any] | None:
         "ls_monthly": dict(sorted(ls_monthly.items())),
         "quarterly_sym": dict(sorted(quarterly_sym.items())),
         "session": session,
+        # v8.0 — CS Audit metrics
+        "total_deposit": round(total_deposit, 2),
+        "total_withdrawal": round(total_withdrawal, 2),
+        "net_deposit": round(net_deposit, 2),
+        "total_commission": round(total_commission, 2),
+        "fee_ratio": round(fee_ratio, 2),
+        "scalp_count": scalp_count,
+        "scalp_ratio": round(scalp_ratio, 2),
+        "holding_time_buckets": holding_time_buckets,
+        "close_reason_distribution": close_reason_distribution,
+        "stop_out_count": stop_out_count,
+        "cs_timeline": timeline_items,
     }

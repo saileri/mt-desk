@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>MT4 Statement - CS Test</title></head><body>
+<table>
+<tr><td>Account: 99999999</td></tr>
+</table>
+Closed Transactions:
+<table>
+<tr><th>Ticket</th><th>Open Time</th><th>Type</th><th>Size</th><th>Item</th><th>Price</th><th>S/L</th><th>T/P</th><th>Close Time</th><th>Price</th><th>Commission</th><th>Taxes</th><th>Swap</th><th>Profit</th><th>Comment</th></tr>
+<!-- Normal trade -->
+<tr><td>1001</td><td>2026.07.01 08:00:00</td><td>buy</td><td>1.00</td><td>xauusd</td><td>2300.00</td><td>0.00</td><td>0.00</td><td>2026.07.01 12:30:00</td><td>2310.00</td><td>-5.00</td><td>0.00</td><td>-2.00</td><td>1000.00</td><td>Manual close</td></tr>
+<!-- Stop Out trade (comment contains "so") -->
+<tr><td>1002</td><td>2026.07.01 09:00:00</td><td>sell</td><td>2.00</td><td>eurusd</td><td>1.0850</td><td>0.00</td><td>0.00</td><td>2026.07.01 09:00:30</td><td>1.0860</td><td>0.00</td><td>0.00</td><td>0.00</td><td>-200.00</td><td>[so] Stop out triggered</td></tr>
+<!-- Scalp trade (< 60 seconds) -->
+<tr><td>1003</td><td>2026.07.01 10:00:00</td><td>buy</td><td>0.50</td><td>gbpusd</td><td>1.2700</td><td>0.00</td><td>0.00</td><td>2026.07.01 10:00:25</td><td>1.2705</td><td>0.00</td><td>0.00</td><td>0.00</td><td>25.00</td><td>Quick scalp</td></tr>
+<!-- SL trade (close_price == sl) -->
+<tr><td>1004</td><td>2026.07.02 08:00:00</td><td>buy</td><td>0.10</td><td>xauusd</td><td>2350.00</td><td>2340.00</td><td>0.00</td><td>2026.07.02 08:30:00</td><td>2340.00</td><td>0.00</td><td>0.00</td><td>-1.00</td><td>-100.00</td><td>sl hit</td></tr>
+<!-- TP trade (close_price == tp) -->
+<tr><td>1005</td><td>2026.07.02 09:00:00</td><td>sell</td><td>0.30</td><td>usdjpy</td><td>150.00</td><td>0.00</td><td>149.00</td><td>2026.07.02 09:15:00</td><td>149.00</td><td>0.00</td><td>0.00</td><td>0.00</td><td>300.00</td><td>tp reached</td></tr>
+<!-- Overnight swap trade -->
+<tr><td>1006</td><td>2026.07.01 08:00:00</td><td>buy</td><td>0.20</td><td>xauusd</td><td>2320.00</td><td>0.00</td><td>0.00</td><td>2026.07.05 08:00:00</td><td>2330.00</td><td>0.00</td><td>0.00</td><td>-15.00</td><td>200.00</td><td>Long hold</td></tr>
+<!-- Balance row (deposit) -->
+<tr><td>0</td><td>2026.07.01 00:00:00</td><td>balance</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>10 000.00</td><td>Initial deposit</td></tr>
+<!-- Withdrawal row (credit/debit) -->
+<tr><td>0</td><td>2026.07.03 00:00:00</td><td>balance</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>-2 000.00</td><td>Withdrawal</td></tr>
+</table>
+Open Trades:
+<table>
+<tr><th>Ticket</th><th>Open Time</th><th>Type</th><th>Size</th><th>Item</th><th>Price</th><th>S/L</th><th>T/P</th><th>Close Time</th><th>Price</th><th>Commission</th><th>Taxes</th><th>Swap</th><th>Profit</th></tr>
+<tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
+</table>
+</body></html>

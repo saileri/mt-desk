@@ -98,7 +98,7 @@ def parse_statement(filepath: str | Path, chunk_size: int = 8 * 1024 * 1024) -> 
     For files smaller than chunk_size, reads in one pass (fast path).
     For larger files, accumulates chunks and parses incrementally.
 
-    Returns: {"account": str, "trades": list[dict], "type": "mt4"|"mt5"}
+    Returns: {"account": str, "trades": list[dict], "cash_flows": list[dict], "type": "mt4"|"mt5"}
     """
     filepath = Path(filepath)
     enc = detect_encoding(filepath)
@@ -148,16 +148,21 @@ def _detect_and_parse(html: str, name: str = "unknown") -> dict:
     account = m.group(1) if m else name
 
     if is_mt5:
-        trades = _parse_mt5(html)
-        return {"account": account, "trades": trades, "type": "mt5"}
+        trades, cash_flows = _parse_mt5(html)
     else:
-        trades = _parse_mt4(html)
-        return {"account": account, "trades": trades, "type": "mt4"}
+        trades, cash_flows = _parse_mt4(html)
+    return {
+        "account": account,
+        "trades": trades,
+        "cash_flows": cash_flows,
+        "type": "mt5" if is_mt5 else "mt4",
+    }
 
 
-def _parse_mt4(html: str) -> list[dict]:
-    """Parse MT4 Statement HTML."""
+def _parse_mt4(html: str) -> tuple[list[dict], list[dict]]:
+    """Parse MT4 Statement HTML. Returns (trades, cash_flows)."""
     trades = []
+    cash_flows = []
     sections = ["Closed Transactions:", "Open Trades:"]
 
     for sec_name in sections:
@@ -200,9 +205,16 @@ def _parse_mt4(html: str) -> list[dict]:
 
             rt = cells[2].strip().lower() if len(cells) > 2 else ""
 
-            # Balance row
-            if rt == "balance" and len(cells) >= 5:
-                continue  # skip for now
+            # Balance / Credit row — capture as cash_flow
+            if rt in ("balance", "credit") and len(cells) >= 5:
+                profit_val = clean_number(cells[13]) if len(cells) > 13 else 0.0
+                cash_flows.append({
+                    "time": parse_date(cells[1]),
+                    "amount": profit_val,
+                    "type": "deposit" if profit_val > 0 else "withdrawal",
+                    "comment": "",
+                })
+                continue
 
             # Try column map
             if col_map:
@@ -232,12 +244,13 @@ def _parse_mt4(html: str) -> list[dict]:
                 if trade["open_time"] is not None and trade["profit"] is not None:
                     trades.append(trade)
 
-    return trades
+    return trades, cash_flows
 
 
-def _parse_mt5(html: str) -> list[dict]:
-    """Parse MT5 Trade History HTML."""
+def _parse_mt5(html: str) -> tuple[list[dict], list[dict]]:
+    """Parse MT5 Trade History HTML. Returns (trades, cash_flows)."""
     trades = []
+    cash_flows = []
 
     # Extract table content
     table_content = ""
@@ -282,8 +295,27 @@ def _parse_mt5(html: str) -> list[dict]:
             trade = _parse_with_map(cells, col_map)
             if trade:
                 trades.append(trade)
+                continue
+            # Check for balance / credit rows (cash flows)
+            type_idx = col_map.get("type")
+            if type_idx is not None and type_idx < len(cells):
+                cell_type = cells[type_idx].strip().lower()
+                if cell_type in ("balance", "credit"):
+                    profit_idx = col_map.get("profit")
+                    profit_val = clean_number(cells[profit_idx]) if profit_idx is not None and profit_idx < len(cells) else 0.0
+                    time_idx = col_map.get("open_time")
+                    time_val = parse_date(cells[time_idx]) if time_idx is not None and time_idx < len(cells) else None
+                    comment_idx = col_map.get("comment")
+                    comment_val = cells[comment_idx].strip() if comment_idx is not None and comment_idx < len(cells) else ""
+                    cash_flows.append({
+                        "time": time_val,
+                        "amount": profit_val,
+                        "type": "deposit" if profit_val > 0 else "withdrawal",
+                        "comment": comment_val,
+                    })
+                    continue
 
-    return trades
+    return trades, cash_flows
 
 
 def _build_col_map(cells: list[str]) -> dict:
@@ -365,4 +397,5 @@ def _parse_with_map(cells: list[str], cmap: dict) -> dict | None:
         "swap": clean_number(get_val("swap")),
         "commission": clean_number(get_val("commission")),
         "profit": profit,
+        "comment": get_val("comment", "").strip(),
     }

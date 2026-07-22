@@ -26,7 +26,9 @@ def _fmt_hours(h):
     return f"{s}天"
 
 
-def build_dashboard_html(account, trades, stats):
+def build_dashboard_html(account, trades, stats, cash_flows=None):
+    if cash_flows is None:
+        cash_flows = []
     avg_w = stats["avg_win"]
     avg_l = abs(stats["avg_loss"])
     plr = avg_w / avg_l if avg_l > 0 else 0
@@ -287,6 +289,112 @@ def build_dashboard_html(account, trades, stats):
     html = html.replace("{SYM_BUBBLE_JSON}", sym_bubble_json)
     html = html.replace("{HEATMAP_JSON}", heatmap_json)
     html = html.replace("{GRAN}", gran).replace("{DATE_SPAN}", str(date_span_days))
+
+    # ── v8.0 CS Audit data ──
+    close_reason_json = json.dumps(stats.get("close_reason_distribution", {}), ensure_ascii=False)
+    holding_time_json = json.dumps(stats.get("holding_time_buckets", {}), ensure_ascii=False)
+    cs_timeline_json = json.dumps(stats.get("cs_timeline", []), ensure_ascii=False)
+
+    # CS KPI cards
+    nd_val = stats.get("net_deposit", 0)
+    nd_color = "--green" if nd_val >= 0 else "--red"
+    net_profit = stats.get("total_pl", 0)
+    np_color = "--green" if net_profit >= 0 else "--red"
+    so_cnt = stats.get("stop_out_count", 0)
+    so_style = "color:var(--red);font-weight:900" if so_cnt > 0 else ""
+    scalp_r = stats.get("scalp_ratio", 0)
+    scalp_warn = '<span style="color:var(--red);font-size:10px;margin-left:4px">⚠️ 高頻/剥头皮预警</span>' if scalp_r > 20 else ""
+    fee_r = stats.get("fee_ratio", 0)
+    fee_s = stats.get("total_swap", 0)
+    fee_c = stats.get("total_commission", 0)
+
+    # Win/loss avg duration
+    win_durs = []
+    loss_durs = []
+    for t in trades:
+        if t.get("open_time") and t.get("close_time"):
+            dur_s = (t["close_time"] - t["open_time"]).total_seconds()
+            if t["profit"] > 0:
+                win_durs.append(dur_s)
+            else:
+                loss_durs.append(dur_s)
+    avg_win_dur = (sum(win_durs) / len(win_durs) / 3600) if win_durs else 0
+    avg_loss_dur = (sum(loss_durs) / len(loss_durs) / 3600) if loss_durs else 0
+    dur_ratio = (avg_win_dur / max(avg_loss_dur, 0.01)) if avg_loss_dur > 0 else 0
+
+    def _fh(h):
+        if h < 1: return f"{int(h*60)}分钟"
+        if h < 24:
+            s = f"{h:.1f}".rstrip("0").rstrip(".")
+            return f"{s}小时"
+        s = f"{h/24:.1f}".rstrip("0").rstrip(".")
+        return f"{s}天"
+
+    scalp_warn_html = scalp_warn
+    so_html = f'<b style="{so_style}">{so_cnt} 次</b>'
+    dur_html = f"赢单 {_fh(avg_win_dur)} / 亏单 {_fh(avg_loss_dur)} (比 {dur_ratio:.1f})"
+
+    cs_cards_html = f"""<div class="cs-kpi-row">
+  <div class="kpi kpi-cs{' cs-warn' if scalp_r > 20 else ''}"><span class="lbl">净入金</span><span class="val" style="color:var({nd_color})">${nd_val:+,.2f}</span><span class="sub">总入金 ${stats.get('total_deposit',0):,.2f} / 总出金 ${stats.get('total_withdrawal',0):,.2f}</span></div>
+  <div class="kpi kpi-cs"><span class="lbl">净盈亏</span><span class="val" style="color:var({np_color})">${net_profit:+,.2f}</span><span class="sub">净利润总额</span></div>
+  <div class="kpi kpi-cs"><span class="lbl">强平/爆仓</span><span class="val">{so_html if so_cnt > 0 else f'{so_cnt} 次'}</span><span class="sub">Stop Out 次数</span></div>
+  <div class="kpi kpi-cs"><span class="lbl">SWAP & 佣金</span><span class="val" style="color:var(--muted)">${fee_s:+,.2f} / ${fee_c:+,.2f}</span><span class="sub">占盈亏 {fee_r:.1f}%</span></div>
+  <div class="kpi kpi-cs"><span class="lbl">超短线 (<1m)</span><span class="val">{scalp_r:.1f}% {scalp_warn_html}</span><span class="sub">{stats.get('scalp_count',0)} 笔持仓不足60秒</span></div>
+  <div class="kpi kpi-cs"><span class="lbl">平均持仓时长</span><span class="val" style="font-size:11px">{dur_html}</span><span class="sub">赢单 vs 亏单平均持仓比</span></div>
+</div>"""
+
+    # CS Filter toolbar
+    cs_filter_toolbar = """<div class="cs-toolbar">
+  <button class="cs-btn active" onclick="csFilter('all')">📋 全部订单</button>
+  <button class="cs-btn" style="border-color:var(--red)" onclick="csFilter('stopout')">🔴 爆仓单 (Stop Out)</button>
+  <button class="cs-btn" style="border-color:var(--yellow)" onclick="csFilter('scalp')">⚡ 超短线 (<1m)</button>
+  <button class="cs-btn" style="border-color:var(--blue)" onclick="csFilter('swap')">🌙 隔夜 Swap 单</button>
+  <span style="flex:1"></span>
+  <span id="csFilterInfo" style="font-size:11px;color:var(--muted)"></span>
+</div>"""
+
+    # Swap burden data by symbol (top 10)
+    sym_pl_raw = stats.get("sym_pl", {})
+    sym_swap_raw = stats.get("sym_swap", {})
+    all_syms_set = set(list(sym_pl_raw.keys())[:10]) | set(list(sym_swap_raw.keys())[:10])
+    swap_burden_data = []
+    for s in sorted(all_syms_set, key=lambda x: abs(sym_pl_raw.get(x, 0)) + abs(sym_swap_raw.get(x, 0)), reverse=True)[:10]:
+        swap_burden_data.append({
+            "name": s.upper(),
+            "profit": round(sym_pl_raw.get(s, 0), 2),
+            "swap": round(sym_swap_raw.get(s, 0), 2),
+            "commission": 0,  # commission not tracked per-symbol currently
+        })
+    swap_burden_json = json.dumps(swap_burden_data, ensure_ascii=False)
+
+    # Cashflow waterfall data
+    total_dep = stats.get("total_deposit", 0)
+    total_wd = stats.get("total_withdrawal", 0)
+    total_sw = stats.get("total_swap", 0)
+    total_com = stats.get("total_commission", 0)
+    final_bal = net_profit + nd_val  # not perfectly accurate but close
+
+    cf_waterfall_data = {
+        "labels": ["初始资金", "+总入金", "-总出金", "±交易盈亏", "-总Swap", "-总佣金", "=最终余额"],
+        "values": [
+            0,
+            total_dep,
+            -total_wd,
+            net_profit,
+            total_sw,
+            -total_com,
+            round(net_profit + total_dep - total_wd + total_sw - total_com, 2),
+        ]
+    }
+    cf_waterfall_json = json.dumps(cf_waterfall_data, ensure_ascii=False)
+
+    html = html.replace("{CS_KPI_CARDS}", cs_cards_html)
+    html = html.replace("{CS_FILTER_TOOLBAR}", cs_filter_toolbar)
+    html = html.replace("{CS_TIMELINE_JSON}", cs_timeline_json)
+    html = html.replace("{CS_CLOSE_REASON_JSON}", close_reason_json)
+    html = html.replace("{CS_HOLDING_TIME_JSON}", holding_time_json)
+    html = html.replace("{CS_SWAP_BURDEN_JSON}", swap_burden_json)
+    html = html.replace("{CS_CASHFLOW_WATERFALL_JSON}", cf_waterfall_json)
     return html
 
 
@@ -382,7 +490,9 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
 .col-hidden{display:none!important}
 /* Volume formatting */
 .vol-num{font-family:'SF Mono','Fira Code',monospace;font-variant-numeric:tabular-nums}
-@media print{@page{margin:12mm}.header,.date-bar,.toolbar,.theme-btn,.metric-guide,.col-toggle{display:none!important}.chart-box{break-inside:avoid;page-break-inside:avoid}.table-wrap{overflow-x:visible}body{font-size:10pt;background:#fff!important;color:#000!important}.kpi{border:1px solid #ccc!important;background:#fff!important;box-shadow:none}.kpi .val{font-size:14pt}.kpi .lbl,.kpi .tip{color:#666!important}.chart-grid{grid-template-columns:1fr}.section-title{color:#000!important;border-bottom:1px solid #999}.summary-line{background:#f5f5f5!important;border:1px solid #ccc}.summary-card{background:#fff!important;border:1px solid #ccc}.equity-section{margin-bottom:16px}}
+@media print{@page{margin:12mm}.header,.date-bar,.toolbar,.theme-btn,.metric-guide,.col-toggle{display:none!important}.chart-box{break-inside:avoid;page-break-inside:avoid}.table-wrap{overflow-x:visible}body{font-size:10pt;background:#fff!important;color:#000!important}.kpi{border:1px solid #ccc!important;background:#fff!important;box-shadow:none}.kpi .val{font-size:14pt}.kpi .lbl,.kpi .tip{color:#666!important}.chart-grid{grid-template-columns:1fr}.section-title{color:#000!important;border-bottom:1px solid #999}.summary-line{background:#f5f5f5!important;border:1px solid #ccc}.summary-card{background:#fff!important;border:1px solid #ccc}.equity-section{margin-bottom:16px}.cs-section,.cs-kpi-row,.cs-toolbar{display:none!important}.cs-kpi-row .kpi{display:none!important}}
+/* CS Audit Mode */
+.cs-section{margin-bottom:18px}.cs-kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 12px;padding:0 clamp(14px,1.4vw,28px)}.kpi-cs{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.05);position:relative}.kpi-cs .lbl{display:block;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}.kpi-cs .val{display:block;font-size:16px;font-weight:700;color:var(--text)}.kpi-cs .sub{display:block;font-size:10px;color:var(--muted);margin-top:2px}.kpi-cs.cs-warn{border-left:3px solid var(--red)}.cs-toolbar{display:flex;align-items:center;gap:6px;padding:6px clamp(14px,1.4vw,28px);background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap}.cs-btn{padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--muted);cursor:pointer;font-size:10px;font-family:inherit}.cs-btn:hover{border-color:var(--blue);color:var(--text)}.cs-btn.active{border-color:var(--blue);color:var(--blue);background:rgba(59,130,246,0.1)}.cs-chart-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:12px 0}.cs-chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:10px 12px 6px;box-shadow:0 1px 2px rgba(0,0,0,.05)}.cs-chart-box-wide{grid-column:span 2}@media(max-width:900px){.cs-kpi-row{grid-template-columns:1fr 1fr}.cs-chart-grid{grid-template-columns:1fr}.cs-chart-box-wide{grid-column:span 1}}@media(max-width:600px){.cs-kpi-row{grid-template-columns:1fr}}
 </style></head><body>
 <div class="header"><h1>MT Desk v7.2 <span>交易習慣分析報表</span></h1>
 <div style="display:flex;align-items:center;gap:12px">
@@ -404,6 +514,8 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
   <button onclick="resetDateFilter()">重置</button>
   <span class="lbl" id="filterInfo"></span>
 </div>
+{CS_KPI_CARDS}
+{CS_FILTER_TOOLBAR}
 <div class="main">
 <div id="summaryLine" class="summary-line"></div>
 <div class="kpi-row kpi-core-row" id="kpiCore">{CORE_CARDS}</div>
@@ -447,6 +559,27 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
   </div>
 </div>
 {SUMMARY}
+<div class="cs-section">
+  <div class="section-title" style="margin-top:20px">🔍 CS 客服审计图表</div>
+  <div class="cs-chart-grid">
+    <div class="cs-chart-box">
+      <div class="chart-head"><div class="chart-title">平仓原因归因</div></div>
+      <div id="chart-close-reason" style="width:100%;height:260px"></div>
+    </div>
+    <div class="cs-chart-box">
+      <div class="chart-head"><div class="chart-title">持仓时长分布</div><div class="chart-sub">秒级分桶</div></div>
+      <div id="chart-holding-time" style="width:100%;height:260px"></div>
+    </div>
+    <div class="cs-chart-box">
+      <div class="chart-head"><div class="chart-title">品种Swap负担</div><div class="chart-sub">盈亏 vs Swap vs 佣金</div></div>
+      <div id="chart-swap-burden" style="width:100%;height:260px"></div>
+    </div>
+    <div class="cs-chart-box cs-chart-box-wide">
+      <div class="chart-head"><div class="chart-title">出入金瀑布图</div></div>
+      <div id="chart-cashflow-waterfall" style="width:100%;height:260px"></div>
+    </div>
+  </div>
+</div>
 <div class="section-title">📋 逐筆明細</div>
 <div class="toolbar"><input type="text" id="searchBox" placeholder="搜尋 Ticket / 品種 / 日期..." oninput="doSearch()">
 <span id="searchInfo" style="font-size:clamp(10px,0.8vw,13px);color:var(--muted)"></span><span style="flex:1"></span>
@@ -494,6 +627,11 @@ var SESSION_RADAR={SESSION_RADAR_JSON};
 var SYM_BUBBLE={SYM_BUBBLE_JSON};
 var CHART_GRAN="{GRAN}";
 var DATE_SPAN={DATE_SPAN};
+var CS_TIMELINE_DATA={CS_TIMELINE_JSON};
+var CS_CLOSE_REASON={CS_CLOSE_REASON_JSON};
+var CS_HOLDING_TIME={CS_HOLDING_TIME_JSON};
+var CS_SWAP_BURDEN={CS_SWAP_BURDEN_JSON};
+var CS_CASHFLOW_WATERFALL={CS_CASHFLOW_WATERFALL_JSON};
 
 (function(){var s=localStorage.getItem('mt-theme');var m=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',s||m);})();
 window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(e){if(!localStorage.getItem('mt-theme')){document.documentElement.setAttribute('data-theme',e.matches?'dark':'light');initAllCharts();}});
@@ -919,6 +1057,206 @@ function applyCurrentFilter(){var df=document.getElementById('dateFrom').value;v
 document.getElementById('searchBox').addEventListener('keydown',function(e){if(e.key==='Enter'&&searchMatches.length>0){e.preventDefault();searchIdx=(searchIdx+1)%searchMatches.length;var gi=searchMatches[searchIdx];currentPage=Math.floor(gi/pageSize)+1;renderTable();setTimeout(function(){var rows=document.querySelectorAll('#tradeBody tr');rows.forEach(function(r){r.classList.remove('highlight');});var li=gi%pageSize;if(rows[li]){rows[li].classList.add('highlight');rows[li].scrollIntoView({behavior:'smooth',block:'center'});}document.getElementById('searchInfo').textContent=(searchIdx+1)+'/'+searchMatches.length+' 條匹配';},30);}});
 function renderTable(){totalPages=Math.ceil(data.length/pageSize)||1;if(currentPage>totalPages)currentPage=totalPages;var start=(currentPage-1)*pageSize;var page=data.slice(start,start+pageSize);var h='';page.forEach(function(t){var dirCls=t.type==='BUY'?'buy':'sell';var plCls=t.profit>0?'win':'loss';var volFixed=t.volume!==undefined?Number(t.volume).toFixed(2):'0.00';h+='<tr><td>'+t.ticket+'</td><td>'+t.open+'</td><td><span class=\"dir-badge '+dirCls+'\">'+t.type+'</span></td><td class=\"vol-num\">'+volFixed+'</td><td>'+t.symbol+'</td><td>'+(t.open_price||'-')+'</td><td class=\"col-extra\">'+t.close+'</td><td class=\"col-extra\">'+(t.close_price||'-')+'</td><td>'+(t.duration_str||'-')+'</td><td><span class=\"pl-badge '+plCls+'\">$'+t.profit_per_lot.toFixed(2)+'</span></td><td>$'+(t.swap||0).toFixed(2)+'</td><td><span class=\"pl-badge '+plCls+'\">$'+t.profit.toFixed(2)+'</span></td></tr>';});document.getElementById('tradeBody').innerHTML=h;var info=currentPage+'/'+totalPages+' ('+data.length+'筆)';document.getElementById('pageInfo').textContent=info;document.getElementById('pageInfo2').textContent=info;}
 renderTable();document.getElementById('sa-profit').textContent='▼';updateSummaryLine(ALL_TRADES.length,ALL_TRADES.filter(function(t){return t.profit>0;}).length,ALL_TRADES.reduce(function(a,t){return a+t.profit;},0));
+
+// ── v8.0 CS Audit Charts ──
+function initCSCharts(){
+  var isDark=document.documentElement.getAttribute('data-theme')==='dark';
+  var tc=isDark?'#e8ecf4':'#1e293b';
+  var mc=isDark?'#7b879c':'#64748b';
+  var G=isDark?'#22c55e':'#16a34a';
+  var R=isDark?'#ef4444':'#dc2626';
+  var B=isDark?'#3b82f6':'#2563eb';
+  var O='#f59e0b';
+  var P='#8b5cf6';
+
+  // 1) Equity timeline with CS event markers
+  (function(){
+    var el=document.getElementById('chart-equity');
+    if(!el)return;
+    try{if(el._ec){try{el._ec.dispose();}catch(e){}}el._ec=null;el.removeAttribute('_echarts_instance_');}catch(e){}
+    // Build timeline data: merge trade equity + CS events
+    var eq=CHART_EQUITY;
+    var dates=eq.dates||[];
+    var equityVals=eq.equity||[];
+    // Mark points for CS events
+    var markPoints=[];
+
+    // Add deposit/withdrawal markpoints
+    if(CS_TIMELINE_DATA&&CS_TIMELINE_DATA.length){
+      CS_TIMELINE_DATA.forEach(function(item){
+        var ts=item[0], evType=item[2], desc=item[3];
+        if(evType==='deposit'){
+          markPoints.push({name:'入金',coord:[ts.substring(0,10),0],value:desc,itemStyle:{color:G},symbol:'pin',symbolSize:35,label:{show:true,formatter:'入金',fontSize:9,color:'#fff',backgroundColor:G,borderRadius:3,padding:[2,6]}});
+        }else if(evType==='withdrawal'){
+          markPoints.push({name:'出金',coord:[ts.substring(0,10),0],value:desc,itemStyle:{color:R},symbol:'pin',symbolSize:35,label:{show:true,formatter:'出金',fontSize:9,color:'#fff',backgroundColor:R,borderRadius:3,padding:[2,6]}});
+        }
+      });
+    }
+    // Add existing peak/trough markers
+    if(eq.dates.length>0){
+      markPoints.push({name:'高點',coord:[eq.dates[eq.dd_peak_idx],eq.equity[eq.dd_peak_idx]],itemStyle:{color:G},symbol:'pin',symbolSize:40,label:{show:true,formatter:'Peak',fontSize:9}});
+      markPoints.push({name:'低點',coord:[eq.dates[eq.dd_trough_idx],eq.equity[eq.dd_trough_idx]],itemStyle:{color:R},symbol:'pin',symbolSize:40,label:{show:true,formatter:'Trough',fontSize:9}});
+    }
+    var markAreas=[];
+    if(eq.dd_peak_idx<eq.dd_trough_idx){
+      markAreas=[{itemStyle:{color:isDark?'rgba(239,68,68,0.12)':'rgba(220,38,38,0.1)'},data:[[{name:'回撤',xAxis:eq.dates[eq.dd_peak_idx],yAxis:0},{xAxis:eq.dates[eq.dd_trough_idx],yAxis:'max'}]]}];
+    }
+
+    var chart=echarts.init(el,isDark?'dark':null);
+    chart.setOption({
+      tooltip:{trigger:'axis',formatter:function(p){
+        if(p.length>=2)return p[1].name+'<br/>權益: $'+p[1].value.toFixed(2)+'<br/>回撤: '+p[0].value.toFixed(2)+'%';
+        return p[0].name+'<br/>權益: $'+p[0].value.toFixed(2);
+      }},
+      grid:[{left:60,right:15,top:15,height:'55%'},{left:60,right:15,top:'72%',height:'20%'}],
+      xAxis:[{type:'category',data:dates,gridIndex:0,axisLabel:{fontSize:9,rotate:30,interval:Math.max(1,Math.floor(dates.length/8))},axisLine:{lineStyle:{color:mc}}},{type:'category',data:dates,gridIndex:1,axisLabel:{show:false},axisLine:{lineStyle:{color:mc}}}],
+      yAxis:[{type:'value',gridIndex:0,axisLabel:{formatter:'$ {value}'},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},{type:'value',gridIndex:1,axisLabel:{formatter:'{value}%',fontSize:9},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}},inverse:true}],
+      series:[
+        {name:'回撤 %',type:'line',xAxisIndex:1,yAxisIndex:1,data:CHART_EQUITY.equity.map(function(v,i){var pk=-Infinity,dd=0;eq.equity.slice(0,i+1).forEach(function(x){if(x>pk)pk=x;dd=Math.max(dd,pk>0?(pk-x)/pk*100:0);});return Math.round(dd*100)/100;}),smooth:true,symbol:'none',lineStyle:{color:'#ef4444',width:1.5},areaStyle:{color:isDark?'rgba(239,68,68,0.3)':'rgba(239,68,68,0.15)'}},
+        {name:'權益曲線',type:'line',xAxisIndex:0,yAxisIndex:0,data:equityVals,smooth:true,symbol:'none',lineStyle:{color:eq.pl>=0?G:R,width:2},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:eq.pl>=0?(isDark?'rgba(34,197,94,0.25)':'rgba(22,163,74,0.15)'):(isDark?'rgba(239,68,68,0.25)':'rgba(220,38,38,0.15)')},{offset:1,color:'rgba(0,0,0,0)'}]}},markPoint:{data:markPoints,symbolOffset:[0,-10]},markArea:{data:markAreas}}
+      ]
+    });
+    el._ec=chart;
+  })();
+
+  // 2) Close reason donut
+  (function(){
+    var el=document.getElementById('chart-close-reason');
+    if(!el)return;
+    try{if(el._ec){el._ec.dispose();}el._ec=null;}catch(e){}
+    var cr=CS_CLOSE_REASON;
+    var colorMap={'Stop Out (爆仓)':'#ef4444','SL (止损)':'#f59e0b','TP (止盈)':'#22c55e','Manual (手动/其他)':'#3b82f6'};
+    var data=Object.keys(cr).map(function(k){return{name:k,value:cr[k],itemStyle:{color:colorMap[k]||'#7b879c'}};});
+    var chart=echarts.init(el,isDark?'dark':null);
+    chart.setOption({
+      tooltip:{trigger:'item',formatter:'{b}: {c} 笔 ({d}%)'},
+      legend:{bottom:0,textStyle:{fontSize:10,color:mc}},
+      series:[{type:'pie',radius:['40%','70%'],center:['50%','48%'],avoidLabelOverlap:false,label:{show:true,formatter:'{b}\n{d}%',fontSize:9,color:tc},data:data,emphasis:{scale:false}}]
+    });
+    el._ec=chart;
+  })();
+
+  // 3) Holding time bar chart (seconds buckets)
+  (function(){
+    var el=document.getElementById('chart-holding-time');
+    if(!el)return;
+    try{if(el._ec){el._ec.dispose();}el._ec=null;}catch(e){}
+    var ht=CS_HOLDING_TIME;
+    var order=['< 10s','10s-1m','1m-5m','5m-1h','1h-24h','> 24h'];
+    var data=order.map(function(k){return{name:k,value:ht[k]||0};});
+    var barColors={'< 10s':R,'10s-1m':O,'1m-5m':isDark?'#fbbf24':'#d97706','5m-1h':B,'1h-24h':G,'> 24h':P};
+    var chart=echarts.init(el,isDark?'dark':null);
+    chart.setOption({
+      tooltip:{trigger:'axis',formatter:function(p){return p[0].name+': '+p[0].value+' 笔';}},
+      grid:{left:60,right:15,top:10,bottom:25},
+      xAxis:{type:'category',data:data.map(function(d){return d.name;}),axisLabel:{fontSize:9,color:tc},axisLine:{lineStyle:{color:mc}}},
+      yAxis:{type:'value',name:'笔数',nameTextStyle:{fontSize:9,color:mc},axisLabel:{fontSize:9},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+      series:[{type:'bar',data:data.map(function(d){return{value:d.value,itemStyle:{color:barColors[d.name]||B}};}),barWidth:'65%',label:{show:true,position:'top',fontSize:9,color:tc}}]
+    });
+    el._ec=chart;
+  })();
+
+  // 4) Swap burden horizontal stacked bar
+  (function(){
+    var el=document.getElementById('chart-swap-burden');
+    if(!el)return;
+    try{if(el._ec){el._ec.dispose();}el._ec=null;}catch(e){}
+    var sb=CS_SWAP_BURDEN;
+    if(!sb||!sb.length){document.getElementById('chart-swap-burden').parentElement.style.display='none';return;}
+    var chart=echarts.init(el,isDark?'dark':null);
+    chart.setOption({
+      tooltip:{trigger:'axis',axisPointer:{type:'shadow'},formatter:function(p){
+        var name=p[0].name;var lines=p.map(function(s){return s.marker+s.seriesName+': $'+s.value.toFixed(2);});
+        return name+'<br/>'+lines.join('<br/>');
+      }},
+      legend:{bottom:0,textStyle:{fontSize:10,color:mc}},
+      grid:{left:60,right:15,top:10,bottom:40},
+      xAxis:{type:'value',axisLabel:{formatter:'${value}',fontSize:9},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+      yAxis:{type:'category',data:sb.map(function(d){return d.name;}).reverse(),axisLabel:{fontSize:10,color:tc},axisLine:{show:false},axisTick:{show:false}},
+      series:[
+        {name:'净盈亏',type:'bar',stack:'total',data:sb.map(function(d){return{value:d.profit,itemStyle:{color:d.profit>=0?G:R}};}),barWidth:'60%',label:{show:true,position:'right',formatter:function(p){return '$'+p.value.toFixed(0);},fontSize:9,color:tc}},
+        {name:'隔夜利息',type:'bar',stack:'total',data:sb.map(function(d){return{value:d.swap,itemStyle:{color:O}};})},
+        {name:'手续费',type:'bar',stack:'total',data:sb.map(function(d){return{value:d.commission,itemStyle:{color:P}};})}
+      ]
+    });
+    el._ec=chart;
+  })();
+
+  // 5) Cashflow waterfall
+  (function(){
+    var el=document.getElementById('chart-cashflow-waterfall');
+    if(!el)return;
+    try{if(el._ec){el._ec.dispose();}el._ec=null;}catch(e){}
+    var wf=CS_CASHFLOW_WATERFALL;
+    if(!wf||!wf.labels||!wf.labels.length)return;
+    // Build waterfall helper arrays
+    var values=wf.values;
+    var base=[],cum=0;
+    var colors=[G,R,'#3b82f6',O,P,P];
+    values.forEach(function(v,i){
+      base.push(cum);
+      cum+=v;
+    });
+    var chart=echarts.init(el,isDark?'dark':null);
+    chart.setOption({
+      tooltip:{trigger:'axis',axisPointer:{type:'shadow'},formatter:function(p){
+        var idx=p[0].dataIndex;return wf.labels[idx]+'<br/>$'+(values[idx]>=0?'+':'')+values[idx].toFixed(2)+'<br/>累计: $'+base[idx].toFixed(2);
+      }},
+      grid:{left:60,right:15,top:10,bottom:35},
+      xAxis:{type:'category',data:wf.labels,axisLabel:{fontSize:9,rotate:20,color:tc,interval:0},axisLine:{lineStyle:{color:mc}}},
+      yAxis:{type:'value',axisLabel:{formatter:'${value}',fontSize:9},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+      series:[
+        {name:'变化',type:'bar',stack:'Total',barWidth:'55%',itemStyle:{borderColor:'transparent',color:function(p){return p.value>=0?G:R;}},data:values.map(function(v,i){return v;}),label:{show:true,position:'top',formatter:function(p){return(p.value>=0?'+':'')+p.value.toFixed(0);},fontSize:9,color:tc}},
+        {name:'置底',type:'bar',stack:'Total',itemStyle:{borderColor:'transparent',color:'rgba(0,0,0,0)'},emphasis:{itemStyle:{borderColor:'transparent',color:'rgba(0,0,0,0)'}},data:base.map(function(v){return v>=0?Math.max(0,v):v;})},
+        {name:'累计',type:'line',data:base.map(function(v,i){return Math.round((v+(values[i]||0))*100)/100;}),itemStyle:{color:isDark?'#fbbf24':'#d97706'},symbol:'diamond',symbolSize:6,lineStyle:{width:2,type:'dashed'},label:{show:true,position:'right',formatter:function(p){return '$'+p.value.toFixed(0);},fontSize:9,color:isDark?'#fbbf24':'#d97706'}}
+      ]
+    });
+    el._ec=chart;
+  })();
+}
+
+// CS Filter toolbar
+window.csFilter=function(mode){
+  document.querySelectorAll('.cs-btn').forEach(function(b){b.classList.remove('active');});
+  event&&event.target&&event.target.classList.add('active');
+  var filtered=[];
+  switch(mode){
+    case 'stopout':
+      filtered=ALL_TRADES.filter(function(t){return t.comment&&(t.comment.toLowerCase().indexOf('so')>=0||t.comment.toLowerCase().indexOf('stop out')>=0);});
+      document.getElementById('csFilterInfo').textContent=filtered.length+' 笔爆仓单';
+      break;
+    case 'scalp':
+      filtered=ALL_TRADES.filter(function(t){if(!t.open||!t.close)return false;var d=(new Date(t.close.replace(' ','T'))-new Date(t.open.replace(' ','T')))/1000;return d<60;});
+      document.getElementById('csFilterInfo').textContent=filtered.length+' 笔超短线 (<1m)';
+      break;
+    case 'swap':
+      filtered=ALL_TRADES.filter(function(t){return t.swap&&Math.abs(t.swap)>0;});
+      document.getElementById('csFilterInfo').textContent=filtered.length+' 笔含隔夜利息单';
+      break;
+    default:
+      filtered=ALL_TRADES.slice();
+      document.getElementById('csFilterInfo').textContent='';
+  }
+  data=filtered.slice();
+  currentPage=1;renderTable();updateKPIs();updateChartsFromFilter();
+};
+
+// Ticket click → timeline highlight (via search)
+document.addEventListener('click',function(e){
+  var td=e.target.closest('td');
+  if(td&&td.closest('#tradeBody')){
+    var row=td.closest('tr');
+    var firstTd=row&&row.querySelector('td:first-child');
+    if(firstTd){
+      var ticket=firstTd.textContent.trim();
+      document.getElementById('searchBox').value=ticket;
+      doSearch();
+    }
+  }
+});
+
+// Init CS charts after main charts
+initCSCharts();
 </script>
 <div class="metric-guide" style="max-width:1500px;margin:20px auto 0;padding:0 clamp(10px,1vw,20px) 20px">
 <details style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;cursor:pointer">
@@ -941,11 +1279,12 @@ renderTable();document.getElementById('sa-profit').textContent='▼';updateSumma
 def process_file(path):
     result = parse_statement(path)
     trades = result["trades"]
+    cash_flows = result.get("cash_flows", [])
     if not trades:
         messagebox.showerror("失敗", "未找到交易記錄")
         return
-    stats = analyze(trades)
-    html = build_dashboard_html(result["account"], trades, stats)
+    stats = analyze(trades, result)  # v8.0: pass full parse_data
+    html = build_dashboard_html(result["account"], trades, stats, cash_flows)  # v8.0: pass cash_flows
     out = Path(tempfile.gettempdir()) / f"MT_Desk_{result['account']}.html"
     out.write_text(html, encoding="utf-8")
     threading.Timer(0.3, lambda: webbrowser.open(out.as_uri())).start()
