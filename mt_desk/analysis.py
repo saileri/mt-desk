@@ -392,59 +392,7 @@ def analyze(trades: list[dict], parse_data: dict | None = None) -> dict[str, Any
             "type": typ,
         })
 
-    # ── 2. Monte Carlo Simulation ──
-    # Shuffle trade P&L 1000 times, compute equity curves, get percentile bands
-    import random
-    trade_pls = [t["profit"] for t in trades]
-    n_sims = 1000
-    n_trades = len(trade_pls)
-    sim_results = []  # each sim's final equity
-    sim_percentiles = {}  # p5, p25, p50, p75, p95 at each trade index
-
-    if n_trades >= 10:
-        random.seed(42)
-        all_sims = []
-        for _ in range(n_sims):
-            shuffled = trade_pls[:]
-            random.shuffle(shuffled)
-            cum = 0
-            curve = []
-            for p in shuffled:
-                cum += p
-                curve.append(round(cum, 2))
-            all_sims.append(curve)
-            sim_results.append(round(cum, 2))
-
-        # Compute percentile bands at each trade index
-        pcts = [5, 25, 50, 75, 95]
-        sim_bands = {}
-        for pct in pcts:
-            band = []
-            for i in range(n_trades):
-                vals = sorted([sim[i] for sim in all_sims])
-                idx = int(len(vals) * pct / 100)
-                idx = min(idx, len(vals) - 1)
-                band.append(vals[idx])
-            sim_bands[str(pct)] = band
-
-        mc_data = {
-            "n_sims": n_sims,
-            "n_trades": n_trades,
-            "bands": sim_bands,
-            "final_equity": sim_results,
-            "actual_curve": [round(sum(trade_pls[:i+1]), 2) for i in range(n_trades)],
-            "percentiles": {
-                "p5": round(sorted(sim_results)[int(n_sims * 0.05)], 2),
-                "p25": round(sorted(sim_results)[int(n_sims * 0.25)], 2),
-                "p50": round(sorted(sim_results)[int(n_sims * 0.50)], 2),
-                "p75": round(sorted(sim_results)[int(n_sims * 0.75)], 2),
-                "p95": round(sorted(sim_results)[int(n_sims * 0.95)], 2),
-            }
-        }
-    else:
-        mc_data = {"n_sims": 0, "n_trades": n_trades, "bands": {}, "final_equity": [], "actual_curve": [], "percentiles": {}}
-
-    # ── 3. Leverage / Volume Correlation ──
+    # ── 2. Leverage / Volume Correlation ──
     # Group trades by volume bucket, compute avg P&L per bucket
     vol_buckets = {}
     for t in trades:
@@ -574,7 +522,6 @@ def analyze(trades: list[dict], parse_data: dict | None = None) -> dict[str, Any
         "cs_timeline": timeline_items,
         # v9.0 — new metrics
         "mae_mfe_data": mae_mfe_data,
-        "monte_carlo": mc_data,
         "leverage_data": leverage_data,
         "vol_pl_scatter": vol_pl_scatter,
         "holding_pl_dist": holding_pl_dist,

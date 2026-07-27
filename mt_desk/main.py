@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MT Desk v9.0 — Insight-driven trading dashboard with advanced charts."""
+"""MT Desk — Insight-driven trading dashboard with advanced charts."""
 import json, io, os, sys, tempfile, tkinter as tk, threading, webbrowser
 from tkinter import filedialog, messagebox
 from datetime import datetime
@@ -469,7 +469,6 @@ def build_dashboard_html(account, trades, stats, cash_flows=None):
 
     # ── v9.0 data ──
     html = html.replace("{MAE_MFE_JSON}", json.dumps(stats.get("mae_mfe_data", []), ensure_ascii=False))
-    html = html.replace("{MONTE_CARLO_JSON}", json.dumps(stats.get("monte_carlo", {}), ensure_ascii=False))
     html = html.replace("{LEVERAGE_JSON}", json.dumps(stats.get("leverage_data", []), ensure_ascii=False))
     html = html.replace("{VOL_PL_SCATTER_JSON}", json.dumps(stats.get("vol_pl_scatter", []), ensure_ascii=False))
     html = html.replace("{HOLDING_PL_DIST_JSON}", json.dumps(stats.get("holding_pl_dist", []), ensure_ascii=False))
@@ -517,7 +516,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 .insight-list li::before{content:'→';position:absolute;left:0;color:var(--blue);font-weight:700}
 .section-title{font-size:clamp(15px,1.2vw,19px);font-weight:700;color:var(--text);margin:24px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
 .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(10px,1vw,14px);margin-bottom:16px}
-.chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:14px 16px 8px;box-shadow:0 2px 8px rgba(0,0,0,.1);transition:border-color .2s,box-shadow .2s}
+.chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:visible;padding:14px 16px 8px;box-shadow:0 2px 8px rgba(0,0,0,.1);transition:border-color .2s,box-shadow .2s}
 .chart-box:hover{border-color:rgba(59,130,246,0.2);box-shadow:0 4px 16px rgba(0,0,0,.15)}
 .chart-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .chart-title{font-size:clamp(13px,1vw,15px);font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;cursor:help;position:relative}
@@ -552,7 +551,7 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
 .kpi-sec-row .kpi-sec .val{font-size:clamp(13px,1.1vw,16px)}
 /* Equity section full width */
 .equity-section{margin-bottom:clamp(12px,1.2vw,20px)}
-.chart-box-full{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:14px 18px 8px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.chart-box-full{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:visible;padding:14px 18px 8px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
 /* Quick insights bar */
 .quick-insights{display:flex;align-items:center;gap:10px;background:linear-gradient(135deg,var(--surface),var(--card));border:1px solid var(--border);border-radius:var(--radius);padding:10px 16px;margin-bottom:12px;font-size:12px;color:var(--text)}
 .qi-icon{font-size:18px}
@@ -575,7 +574,7 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
 .vol-num{font-family:'SF Mono','Fira Code',monospace;font-variant-numeric:tabular-nums}
 @media print{@page{margin:12mm}.header,.date-bar,.toolbar,.theme-btn,.metric-guide,.col-toggle{display:none!important}.chart-box{break-inside:avoid;page-break-inside:avoid}.table-wrap{overflow-x:visible}body{font-size:10pt;background:#fff!important;color:#000!important}.kpi{border:1px solid #ccc!important;background:#fff!important;box-shadow:none}.kpi .val{font-size:14pt}.kpi .lbl,.kpi .tip{color:#666!important}.chart-grid{grid-template-columns:1fr}.section-title{color:#000!important;border-bottom:1px solid #999}.summary-line{background:#f5f5f5!important;border:1px solid #ccc}.summary-card{background:#fff!important;border:1px solid #ccc}.equity-section{margin-bottom:16px}.cs-section,.cs-kpi-row,.cs-toolbar{display:none!important}.cs-kpi-row .kpi{display:none!important}}
 /* CS Audit Mode */
-.cs-section{margin-bottom:18px}.cs-kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 12px;padding:0 clamp(14px,1.4vw,28px)}.kpi-cs{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.05);position:relative}.kpi-cs .lbl{display:block;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}.kpi-cs .val{display:block;font-size:16px;font-weight:700;color:var(--text)}.kpi-cs .sub{display:block;font-size:10px;color:var(--muted);margin-top:2px}.kpi-cs.cs-warn{border-left:3px solid var(--red)}.cs-toolbar{display:flex;align-items:center;gap:6px;padding:6px clamp(14px,1.4vw,28px);background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap}.cs-btn{padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--muted);cursor:pointer;font-size:10px;font-family:inherit}.cs-btn:hover{border-color:var(--blue);color:var(--text)}.cs-btn.active{border-color:var(--blue);color:var(--blue);background:rgba(59,130,246,0.1)}.cs-chart-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:12px 0}.cs-chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:10px 12px 6px;box-shadow:0 1px 2px rgba(0,0,0,.05)}.cs-chart-box-wide{grid-column:span 2}@media(max-width:900px){.cs-kpi-row{grid-template-columns:1fr 1fr}.cs-chart-grid{grid-template-columns:1fr}.cs-chart-box-wide{grid-column:span 1}}@media(max-width:600px){.cs-kpi-row{grid-template-columns:1fr}}
+.cs-section{margin-bottom:18px}.cs-kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 12px;padding:0 clamp(14px,1.4vw,28px)}.kpi-cs{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.05);position:relative}.kpi-cs .lbl{display:block;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}.kpi-cs .val{display:block;font-size:16px;font-weight:700;color:var(--text)}.kpi-cs .sub{display:block;font-size:10px;color:var(--muted);margin-top:2px}.kpi-cs.cs-warn{border-left:3px solid var(--red)}.cs-toolbar{display:flex;align-items:center;gap:6px;padding:6px clamp(14px,1.4vw,28px);background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap}.cs-btn{padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--muted);cursor:pointer;font-size:10px;font-family:inherit}.cs-btn:hover{border-color:var(--blue);color:var(--text)}.cs-btn.active{border-color:var(--blue);color:var(--blue);background:rgba(59,130,246,0.1)}.cs-chart-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:12px 0}.cs-chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:visible;padding:10px 12px 6px;box-shadow:0 1px 2px rgba(0,0,0,.05)}.cs-chart-box-wide{grid-column:span 2}@media(max-width:900px){.cs-kpi-row{grid-template-columns:1fr 1fr}.cs-chart-grid{grid-template-columns:1fr}.cs-chart-box-wide{grid-column:span 1}}@media(max-width:600px){.cs-kpi-row{grid-template-columns:1fr}}
 /* ═══ Tab Navigation ═══ */
 .tab-nav{display:flex;gap:0;padding:0 clamp(14px,1.4vw,28px);background:var(--surface);border-bottom:2px solid var(--border);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .tab-nav::-webkit-scrollbar{display:none}
@@ -590,11 +589,6 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
 /* ═══ MAE/MFE Scatter ═══ */
 .scatter-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(10px,1vw,14px);margin-bottom:16px}
 @media(max-width:900px){.scatter-grid{grid-template-columns:1fr}}
-/* ═══ Monte Carlo ═══ */
-.mc-stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
-.mc-stat{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px;text-align:center;min-width:100px}
-.mc-stat .mc-label{font-size:10px;color:var(--muted);display:block}
-.mc-stat .mc-val{font-size:16px;font-weight:700;color:var(--text)}
 /* ═══ Risk Banner ═══ */
 .risk-banner{border-radius:var(--radius);padding:12px 18px;margin:0 clamp(14px,1.4vw,28px) 16px;display:flex;align-items:center;gap:12px;font-size:13px;line-height:1.6;animation:tabFadeIn .4s ease}
 .risk-banner.warn{background:rgba(244,63,94,0.1);border:1px solid rgba(244,63,94,0.3);color:#fda4af}
@@ -671,12 +665,7 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
     <div class="chart-head"><div class="chart-title">季度品種偏好變化 <span class="ct-info">ⓘ</span><span class="ct-tip">100% 堆疊柱狀圖，顯示每季度各交易品種的佔比變化，觀察品種集中度趨勢。</span></div><div class="chart-sub">100% 堆疊柱：看比例變化</div></div>
     <div id="chart-quarterly-sym" style="width:100%;height:300px"></div>
   </div>
-  <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">蒙地卡羅模擬 <span class="ct-info">ⓘ</span><span class="ct-tip">將實際交易順序隨機洗牌 1000 次，模擬不同交易順序下的權益曲線。P5~P95 為 90% 信心區間，實際曲線若偏離中位數說明結果受交易順序影響。</span></div><div class="chart-sub">1000次隨機洗牌，P5~P95信心區間</div></div>
-    <div id="chart-monte-carlo" style="width:100%;height:300px"></div>
-  </div>
 </div>
-<div class="mc-stats" id="mcStats"></div>
 <div class="section-title">⚖️ 槓桿/手數與盈虧相關性</div>
 <div class="chart-grid">
   <div class="chart-box">
@@ -832,7 +821,6 @@ var CS_HOLDING_TIME={CS_HOLDING_TIME_JSON};
 var CS_SWAP_BURDEN={CS_SWAP_BURDEN_JSON};
 var CS_CASHFLOW_WATERFALL={CS_CASHFLOW_WATERFALL_JSON};
 var MAE_MFE_DATA={MAE_MFE_JSON};
-var MONTE_CARLO={MONTE_CARLO_JSON};
 var LEVERAGE_DATA={LEVERAGE_JSON};
 var VOL_PL_SCATTER={VOL_PL_SCATTER_JSON};
 var HOLDING_PL_DIST={HOLDING_PL_DIST_JSON};
@@ -1114,7 +1102,7 @@ function initAllCharts(){
   }
 }
 window.addEventListener('resize',function(){
-  ['chart-symbol-pie','chart-symbol-pl','chart-volume-donut','chart-swap-bar','chart-waterfall','chart-ls-monthly','chart-quarterly-sym','chart-duration','chart-equity','chart-heatmap','chart-session-radar','chart-sym-bubble','chart-monte-carlo','chart-leverage','chart-vol-pl-scatter','chart-holding-pl','chart-mae','chart-mfe','chart-mae-mfe-scatter','chart-close-reason','chart-holding-time','chart-swap-burden','chart-cashflow-waterfall'].forEach(function(id){
+  ['chart-symbol-pie','chart-symbol-pl','chart-volume-donut','chart-swap-bar','chart-waterfall','chart-ls-monthly','chart-quarterly-sym','chart-duration','chart-equity','chart-heatmap','chart-session-radar','chart-sym-bubble','chart-leverage','chart-vol-pl-scatter','chart-holding-pl','chart-mae','chart-mfe','chart-mae-mfe-scatter','chart-close-reason','chart-holding-time','chart-swap-burden','chart-cashflow-waterfall'].forEach(function(id){
     var el=document.getElementById(id);if(el&&el._ec)el._ec.resize();
   });
 });
@@ -1301,7 +1289,7 @@ document.getElementById('searchBox').addEventListener('keydown',function(e){if(e
 function renderTable(){totalPages=Math.ceil(data.length/pageSize)||1;if(currentPage>totalPages)currentPage=totalPages;var start=(currentPage-1)*pageSize;var page=data.slice(start,start+pageSize);var h='';page.forEach(function(t){var dirCls=t.type==='BUY'?'buy':'sell';var plCls=t.profit>0?'win':'loss';var volFixed=t.volume!==undefined?Number(t.volume).toFixed(2):'0.00';h+='<tr><td>'+t.ticket+'</td><td>'+t.open+'</td><td><span class=\"dir-badge '+dirCls+'\">'+t.type+'</span></td><td class=\"vol-num\">'+volFixed+'</td><td>'+t.symbol+'</td><td>'+(t.open_price||'-')+'</td><td class=\"col-extra\">'+t.close+'</td><td class=\"col-extra\">'+(t.close_price||'-')+'</td><td>'+(t.duration_str||'-')+'</td><td><span class=\"pl-badge '+plCls+'\">$'+t.profit_per_lot.toFixed(2)+'</span></td><td>$'+(t.swap||0).toFixed(2)+'</td><td><span class=\"pl-badge '+plCls+'\">$'+t.profit.toFixed(2)+'</span></td></tr>';});document.getElementById('tradeBody').innerHTML=h;var info=currentPage+'/'+totalPages+' ('+data.length+'筆)';document.getElementById('pageInfo').textContent=info;document.getElementById('pageInfo2').textContent=info;}
 renderTable();document.getElementById('sa-profit').textContent='▼';updateSummaryLine(ALL_TRADES.length,ALL_TRADES.filter(function(t){return t.profit>0;}).length,ALL_TRADES.reduce(function(a,t){return a+t.profit;},0));
 
-// ═══ v9.0 New Charts: Monte Carlo, Leverage, Holding PL ═══
+// ═══ v9.0 New Charts: Leverage, Holding PL, MAE/MFE ═══
 function initNewCharts(){
   var isDark=document.documentElement.getAttribute('data-theme')==='dark';
   var tc=isDark?'#e8ecf4':'#1e293b';
@@ -1313,48 +1301,6 @@ function initNewCharts(){
   var O='#f59e0b';
   var P='#8b5cf6';
 
-  // 1) Monte Carlo Simulation
-  (function(){
-    var el=document.getElementById('chart-monte-carlo');
-    if(!el||!MONTE_CARLO||!MONTE_CARLO.n_sims)return;
-    try{if(el._ec){el._ec.dispose();}el._ec=null;}catch(e){}
-    var mc=MONTE_CARLO;
-    var n=mc.n_trades;
-    var xLabels=[];for(var i=1;i<=n;i++)xLabels.push(i);
-    var bands=mc.bands;
-    var series=[
-      {name:'P5',type:'line',data:bands['5']||[],symbol:'none',lineStyle:{width:1,color:isDark?'rgba(239,68,68,0.4)':'rgba(220,38,38,0.3)'},areaStyle:null,stack:'band1',z:1},
-      {name:'P25-P5',type:'line',data:(bands['25']||[]).map(function(v,i){return v-(bands['5']?bands['5'][i]:0);}),symbol:'none',lineStyle:{width:0},areaStyle:{color:isDark?'rgba(239,68,68,0.15)':'rgba(220,38,38,0.08)'},stack:'band1',z:2},
-      {name:'P50',type:'line',data:bands['50']||[],symbol:'none',lineStyle:{width:2,color:Y,type:'dashed'},z:5},
-      {name:'P75-P50',type:'line',data:(bands['75']||[]).map(function(v,i){return v-(bands['50']?bands['50'][i]:0);}),symbol:'none',lineStyle:{width:0},areaStyle:{color:isDark?'rgba(34,197,94,0.15)':'rgba(22,163,74,0.08)'},stack:'band2',z:2},
-      {name:'P95',type:'line',data:(bands['95']||[]).map(function(v,i){return v-(bands['75']?bands['75'][i]:0);}),symbol:'none',lineStyle:{width:1,color:isDark?'rgba(34,197,94,0.4)':'rgba(22,163,74,0.3)'},stack:'band2',z:1},
-      {name:'實際曲線',type:'line',data:mc.actual_curve,symbol:'none',lineStyle:{color:B,width:2.5},z:10}
-    ];
-    var chart=echarts.init(el,isDark?'dark':null);
-    chart.setOption({
-      tooltip:{trigger:'axis',formatter:function(p){
-        var actual=p.find(function(s){return s.seriesName==='實際曲線';});
-        return (actual?p[0].name+'筆交易':'第'+p[0].name+'筆')+(actual?'<br/>實際: $'+actual.value.toFixed(2):'');
-      }},
-      legend:{bottom:0,textStyle:{fontSize:9,color:tc},data:['P5','P50','P95','實際曲線']},
-      grid:{left:60,right:15,top:15,bottom:40},
-      xAxis:{type:'category',data:xLabels,name:'交易序號',nameTextStyle:{fontSize:9,color:mc},axisLabel:{fontSize:9,color:tc},axisLine:{lineStyle:{color:mc}}},
-      yAxis:{type:'value',name:'累計盈虧 ($)',nameTextStyle:{fontSize:9,color:mc},axisLabel:{fontSize:9,formatter:'${value}'},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
-      series:series
-    });
-    el._ec=chart;
-    // Stats
-    var statsEl=document.getElementById('mcStats');
-    if(statsEl&&mc.percentiles){
-      var p=mc.percentiles;
-      statsEl.innerHTML=
-        '<div class="mc-stat"><span class="mc-label">P5 (worst 5%)</span><span class="mc-val" style="color:var(--red)">$'+(p.p5||0).toFixed(0)+'</span></div>'+
-        '<div class="mc-stat"><span class="mc-label">P25</span><span class="mc-val">$'+(p.p25||0).toFixed(0)+'</span></div>'+
-        '<div class="mc-stat"><span class="mc-label">P50 (中位數)</span><span class="mc-val" style="color:var(--blue)">$'+(p.p50||0).toFixed(0)+'</span></div>'+
-        '<div class="mc-stat"><span class="mc-label">P75</span><span class="mc-val">$'+(p.p75||0).toFixed(0)+'</span></div>'+
-        '<div class="mc-stat"><span class="mc-label">P95 (best 5%)</span><span class="mc-val" style="color:var(--green)">$'+(p.p95||0).toFixed(0)+'</span></div>';
-    }
-  })();
 
   // 2) Leverage bucket bar chart
   (function(){
@@ -1792,11 +1738,11 @@ def process_file(path):
 
 def main():
     root = tk.Tk()
-    root.title("MT Desk v9.0")
+    root.title("MT Desk")
     root.geometry("400x260")
     root.configure(bg="#f4f6f9")
     root.resizable(False, False)
-    tk.Label(root, text="MT Desk v9.0", font=("Segoe UI", 22, "bold"), fg="#2563eb", bg="#f4f6f9").pack(pady=(24, 4))
+    tk.Label(root, text="MT Desk", font=("Segoe UI", 22, "bold"), fg="#2563eb", bg="#f4f6f9").pack(pady=(24, 4))
     tk.Label(root, text="洞察驅動交易習慣分析報表 · ECharts 進階圖表", font=("Segoe UI", 10), fg="#6b7280", bg="#f4f6f9").pack(pady=(0, 20))
     status_var = tk.StringVar(value="選擇 HTML 報表檔案")
     status = tk.Label(root, textvariable=status_var, font=("Segoe UI", 9), fg="#6b7280", bg="#f4f6f9")
