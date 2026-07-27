@@ -520,7 +520,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 .chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:14px 16px 8px;box-shadow:0 2px 8px rgba(0,0,0,.1);transition:border-color .2s,box-shadow .2s}
 .chart-box:hover{border-color:rgba(59,130,246,0.2);box-shadow:0 4px 16px rgba(0,0,0,.15)}
 .chart-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-.chart-title{font-size:clamp(13px,1vw,15px);font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px}
+.chart-title{font-size:clamp(13px,1vw,15px);font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px;cursor:help;position:relative}
+.chart-title .ct-info{font-size:12px;color:var(--muted);font-weight:400;cursor:help}
+.chart-title .ct-tip{display:none;position:absolute;bottom:calc(100% + 8px);left:0;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:12px;font-weight:400;line-height:1.5;white-space:normal;max-width:320px;text-align:left;z-index:200;box-shadow:0 4px 16px rgba(0,0,0,.25);pointer-events:none}
+.chart-title:hover .ct-tip{display:block}
 .chart-sub{font-size:10px;color:var(--muted);font-weight:400}
 #chart-symbol-pie{cursor:pointer}
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
@@ -644,7 +647,7 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
 <div class="kpi-row kpi-core-row" id="kpiCore">{CORE_CARDS}</div>
 <div class="equity-section">
   <div class="chart-box chart-box-full">
-    <div class="chart-head"><div class="chart-title">📈 權益曲線與最大回撤</div><div class="chart-sub" id="equitySub"></div></div>
+    <div class="chart-head"><div class="chart-title">📈 權益曲線與最大回撤 <span class="ct-info">ⓘ</span><span class="ct-tip">累積淨盈虧隨時間變化的曲線，下方子圖顯示每筆交易的回撤幅度。回撤越大代表風險越高。</span></div><div class="chart-sub" id="equitySub"></div></div>
     <div id="chart-equity" style="width:100%;height:400px"></div>
   </div>
 </div>
@@ -657,19 +660,19 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
 <div class="section-title">📉 月度/季度盈虧分析</div>
 <div class="chart-grid">
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">月度盈虧瀑布圖</div><div class="chart-sub">起始權益 → 每月貢獻 → 最終權益</div></div>
+    <div class="chart-head"><div class="chart-title">月度盈虧瀑布圖 <span class="ct-info">ⓘ</span><span class="ct-tip">從起始權益開始，每月盈虧的累加效果。綠色=盈利月，紅色=虧損月，最終柱=結束權益。</span></div><div class="chart-sub">起始權益 → 每月貢獻 → 最終權益</div></div>
     <div id="chart-waterfall" style="width:100%;height:300px"></div>
   </div>
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">每月多空傾向與獲利佔比</div><div class="chart-sub">分組柱 = 做多/做空 P&L，折線 = 當月日獲利佔比</div></div>
+    <div class="chart-head"><div class="chart-title">每月多空傾向與獲利佔比 <span class="ct-info">ⓘ</span><span class="ct-tip">分組柱狀圖顯示每月做多(Buy)與做空(Sell)的盈虧，折線顯示當月獲利交易佔比。</span></div><div class="chart-sub">分組柱 = 做多/做空 P&L，折線 = 當月日獲利佔比</div></div>
     <div id="chart-ls-monthly" style="width:100%;height:300px"></div>
   </div>
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">季度品種偏好變化</div><div class="chart-sub">100% 堆疊柱：看比例變化</div></div>
+    <div class="chart-head"><div class="chart-title">季度品種偏好變化 <span class="ct-info">ⓘ</span><span class="ct-tip">100% 堆疊柱狀圖，顯示每季度各交易品種的佔比變化，觀察品種集中度趨勢。</span></div><div class="chart-sub">100% 堆疊柱：看比例變化</div></div>
     <div id="chart-quarterly-sym" style="width:100%;height:300px"></div>
   </div>
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">蒙地卡羅模擬</div><div class="chart-sub">1000次隨機洗牌，P5~P95信心區間</div></div>
+    <div class="chart-head"><div class="chart-title">蒙地卡羅模擬 <span class="ct-info">ⓘ</span><span class="ct-tip">將實際交易順序隨機洗牌 1000 次，模擬不同交易順序下的權益曲線。P5~P95 為 90% 信心區間，實際曲線若偏離中位數說明結果受交易順序影響。</span></div><div class="chart-sub">1000次隨機洗牌，P5~P95信心區間</div></div>
     <div id="chart-monte-carlo" style="width:100%;height:300px"></div>
   </div>
 </div>
@@ -677,11 +680,11 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
 <div class="section-title">⚖️ 槓桿/手數與盈虧相關性</div>
 <div class="chart-grid">
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">手數分桶盈虧分析</div><div class="chart-sub">按手數區間分組的平均盈虧與勝率</div></div>
+    <div class="chart-head"><div class="chart-title">手數分桶盈虧分析 <span class="ct-info">ⓘ</span><span class="ct-tip">按交易手數(Lots)區間分組，顯示各組的平均盈虧(柱)和勝率(折線)。觀察大手數是否帶來更高收益或更高風險。</span></div><div class="chart-sub">按手數區間分組的平均盈虧與勝率</div></div>
     <div id="chart-leverage" style="width:100%;height:300px"></div>
   </div>
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">手數 vs 盈虧散點圖</div><div class="chart-sub">每筆交易的手數與盈虧分佈</div></div>
+    <div class="chart-head"><div class="chart-title">手數 vs 盈虧散點圖 <span class="ct-info">ⓘ</span><span class="ct-tip">每筆交易的手數(X軸)與盈虧(Y軸)分佈。氣泡大小=盈虧金額，綠=盈利、紅=虧損。觀察手數與盈虧的相關性。</span></div><div class="chart-sub">每筆交易的手數與盈虧分佈</div></div>
     <div id="chart-vol-pl-scatter" style="width:100%;height:300px"></div>
   </div>
 </div>
@@ -692,30 +695,30 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
 <div class="section-title">🕐 時間維度分析</div>
 <div class="chart-grid">
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">交易時段熱力圖</div><div class="chart-sub">星期 × 小時：顏色越深 = 筆數越多</div></div>
+    <div class="chart-head"><div class="chart-title">交易時段熱力圖 <span class="ct-info">ⓘ</span><span class="ct-tip">星期×小時的交易頻率熱力圖，顏色越深代表該時段交易越密集。幫助識別交易活躍時段。</span></div><div class="chart-sub">星期 × 小時：顏色越深 = 筆數越多</div></div>
     <div id="chart-heatmap" style="width:100%;height:300px"></div>
   </div>
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">交易時段表現</div><div class="chart-sub">亞洲盤 vs 倫敦盤 vs 紐約盤 — 筆數/獲利佔比/盈虧 三元分析</div></div>
+    <div class="chart-head"><div class="chart-title">交易時段表現 <span class="ct-info">ⓘ</span><span class="ct-tip">亞洲盤、倫敦盤、紐約盤的三元雷達圖，比較各時段的交易筆數、獲利佔比和總盈虧。</span></div><div class="chart-sub">亞洲盤 vs 倫敦盤 vs 紐約盤 — 筆數/獲利佔比/盈虧 三元分析</div></div>
     <div id="chart-session-radar" style="width:100%;height:320px"></div>
   </div>
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">持倉時間分佈</div><div class="chart-sub" id="durationSub"></div></div>
+    <div class="chart-head"><div class="chart-title">持倉時間分佈 <span class="ct-info">ⓘ</span><span class="ct-tip">所有交易按持倉時長分桶統計。持倉過短可能為剝頭皮，過長可能為波段策略。</span></div><div class="chart-sub" id="durationSub"></div></div>
     <div id="chart-duration" style="width:100%;height:300px"></div>
   </div>
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">持倉時間盈虧分佈</div><div class="chart-sub">各時間段的累計盈虧與交易筆數</div></div>
+    <div class="chart-head"><div class="chart-title">持倉時間盈虧分佈 <span class="ct-info">ⓘ</span><span class="ct-tip">各持倉時間區間的累計盈虧。幫助判斷哪種持倉週期最賺錢或最虧錢。</span></div><div class="chart-sub">各時間段的累計盈虧與交易筆數</div></div>
     <div id="chart-holding-pl" style="width:100%;height:300px"></div>
   </div>
 </div>
 <div class="section-title">💱 品種維度分析</div>
 <div class="chart-grid">
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">品種綜合矩陣</div><div class="chart-sub">X=交易次數 · Y=獲利佔比 · 大小=盈虧貢獻</div></div>
+    <div class="chart-head"><div class="chart-title">品種綜合矩陣 <span class="ct-info">ⓘ</span><span class="ct-tip">氣泡矩陣：X=交易次數，Y=獲利佔比，氣泡大小=盈虧貢獻。快速比較各品種的表現。</span></div><div class="chart-sub">X=交易次數 · Y=獲利佔比 · 大小=盈虧貢獻</div></div>
     <div id="chart-sym-bubble" style="width:100%;height:300px"></div>
   </div>
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">品種盈虧貢獻</div></div>
+    <div class="chart-head"><div class="chart-title">品種盈虧貢獻 <span class="ct-info">ⓘ</span><span class="ct-tip">各交易品種的總盈虧柱狀圖。綠色=盈利品種，紅色=虧損品種。點擊可篩選該品種交易。</span></div></div>
     <div id="chart-symbol-pl" style="width:100%;height:280px"></div>
   </div>
 </div>
@@ -729,21 +732,21 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
 </div>
 <div class="scatter-grid">
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">MAE 散點圖</div><div class="chart-sub">X=交易序號 · Y=最大浮虧金額 · 顏色=盈虧</div></div>
+    <div class="chart-head"><div class="chart-title">MAE 散點圖 <span class="ct-info">ⓘ</span><span class="ct-tip">MAE=最大不利偏移(Maximum Adverse Excursion)，即平倉前最大浮虧金額。點的顏色=最終盈虧，觀察虧損交易的 MAE 是否過大。</span></div><div class="chart-sub">X=交易序號 · Y=最大浮虧金額 · 顏色=盈虧</div></div>
     <div id="chart-mae" style="width:100%;height:350px"></div>
   </div>
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">MFE 散點圖</div><div class="chart-sub">X=交易序號 · Y=最大浮盈金額 · 顏色=盈虧</div></div>
+    <div class="chart-head"><div class="chart-title">MFE 散點圖 <span class="ct-info">ⓘ</span><span class="ct-tip">MFE=最大有利偏移(Maximum Favorable Excursion)，即平倉前最大浮盈金額。如果盈利交易的 MFE 遠大於實際盈利，說明未及時獲利出場。</span></div><div class="chart-sub">X=交易序號 · Y=最大浮盈金額 · 顏色=盈虧</div></div>
     <div id="chart-mfe" style="width:100%;height:350px"></div>
   </div>
 </div>
 <div class="chart-grid">
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">MAE vs MFE 分佈</div><div class="chart-sub">X=MAE · Y=MFE · 氣泡=盈虧金額</div></div>
+    <div class="chart-head"><div class="chart-title">MAE vs MFE 分佈 <span class="ct-info">ⓘ</span><span class="ct-tip">X=MAE(最大浮虧)，Y=MFE(最大浮盈)，氣泡大小=最終盈虧。理想交易應在左上方(MFE高、MAE低)。</span></div><div class="chart-sub">X=MAE · Y=MFE · 氣泡=盈虧金額</div></div>
     <div id="chart-mae-mfe-scatter" style="width:100%;height:350px"></div>
   </div>
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">MAE/MFE 統計摘要</div></div>
+    <div class="chart-head"><div class="chart-title">MAE/MFE 統計摘要 <span class="ct-info">ⓘ</span><span class="ct-tip">按盈利/虧損分組的 MAE/MFE 統計比較。如果虧損單平均 MAE 遠大於平均虧損，說明停損設得太寬。</span></div></div>
     <div id="mae-mfe-summary" style="padding:16px;font-size:13px;line-height:2;color:var(--text)"></div>
   </div>
 </div>
@@ -756,19 +759,19 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
 <div class="section-title">🔍 CS 客服审计图表</div>
 <div class="cs-chart-grid">
   <div class="cs-chart-box">
-    <div class="chart-head"><div class="chart-title">平仓原因归因</div></div>
+    <div class="chart-head"><div class="chart-title">平倉原因歸因 <span class="ct-info">ⓘ</span><span class="ct-tip">自動偵測平倉原因：止盈(TP)、止損(SL)、強平(SO)、手動平倉等分佈。強平佔比高代表風險控制不足。</span></div></div>
     <div id="chart-close-reason" style="width:100%;height:260px"></div>
   </div>
   <div class="cs-chart-box">
-    <div class="chart-head"><div class="chart-title">持仓时长分布</div><div class="chart-sub">秒级分桶</div></div>
+    <div class="chart-head"><div class="chart-title">持倉時長分佈 <span class="ct-info">ⓘ</span><span class="ct-tip">秒級精度持倉時間分桶。< 10秒 可能為高頻刷單或強平特徵，需結合盈虧判斷。</span></div><div class="chart-sub">秒级分桶</div></div>
     <div id="chart-holding-time" style="width:100%;height:260px"></div>
   </div>
   <div class="cs-chart-box">
-    <div class="chart-head"><div class="chart-title">品种Swap负担</div><div class="chart-sub">盈亏 vs Swap vs 佣金</div></div>
+    <div class="chart-head"><div class="chart-title">品種 Swap 負擔 <span class="ct-info">ⓘ</span><span class="ct-tip">各品種的淨盈虧(綠/紅)、隔夜利息(橙)、手續費(紫)堆疊比較。Swap 佔比過高侵蝕利潤。</span></div><div class="chart-sub">盈亏 vs Swap vs 佣金</div></div>
     <div id="chart-swap-burden" style="width:100%;height:260px"></div>
   </div>
   <div class="cs-chart-box cs-chart-box-wide">
-    <div class="chart-head"><div class="chart-title">出入金瀑布图</div></div>
+    <div class="chart-head"><div class="chart-title">出入金瀑布圖 <span class="ct-info">ⓘ</span><span class="ct-tip">帳戶資金流向：入金(綠)、出金(紅)、交易盈虧的累積效果。最終柱=當前淨權益。</span></div></div>
     <div id="chart-cashflow-waterfall" style="width:100%;height:260px"></div>
   </div>
 </div>
@@ -894,14 +897,14 @@ function initAllCharts(){
   }},isDark);
   var pieEl=document.getElementById('chart-symbol-pie');if(pieEl&&pieEl._ec){pieEl._ec.off('click');pieEl._ec.on('click',function(params){if(params.name)filterBySymbol(params.name);});}
 
-  // Symbol P&L bar
-  var sp=SYM_PL_DATA.slice().reverse();
+  // Symbol P&L bar (vertical)
+  var sp=SYM_PL_DATA;
   ecOpt({id:'chart-symbol-pl',opt:{
     tooltip:{trigger:'axis',formatter:function(p){return p[0].name+': $'+p[0].value.toFixed(2);}},
-    grid:{left:60,right:15,top:10,bottom:5},
-    xAxis:{type:'value',axisLabel:{fontSize:9,formatter:'${value}'},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
-    yAxis:{type:'category',data:sp.map(function(d){return d.name;}),axisLabel:{fontSize:10,color:tc},axisLine:{show:false},axisTick:{show:false}},
-    series:[{type:'bar',data:sp.map(function(d){return{value:d.value,itemStyle:{color:d.value>=0?G:R}};}),barWidth:'60%',label:{show:true,position:'right',formatter:function(p){return '$'+p.value.toFixed(0);},fontSize:9,color:tc}}]
+    grid:{left:55,right:15,top:10,bottom:50},
+    xAxis:{type:'category',data:sp.map(function(d){return d.name;}),axisLabel:{fontSize:9,rotate:30,color:tc},axisLine:{lineStyle:{color:mc}}},
+    yAxis:{type:'value',axisLabel:{fontSize:9,formatter:'${value}'},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+    series:[{type:'bar',data:sp.map(function(d){return{value:d.value,itemStyle:{color:d.value>=0?G:R}};}),barWidth:'55%',label:{show:true,position:'top',formatter:function(p){return '$'+p.value.toFixed(0);},fontSize:9,color:tc}}]
   }},isDark);
 
   // Volume donut
@@ -911,14 +914,14 @@ function initAllCharts(){
       label:{show:true,formatter:'{b}\n{d}%',fontSize:10,color:tc},data:VOL_DATA,emphasis:{scale:false}}]
   }},isDark);
 
-  // Swap bar
-  var sw=SWAP_DATA.slice().reverse();
+  // Swap bar (vertical)
+  var sw=SWAP_DATA;
   ecOpt({id:'chart-swap-bar',opt:{
     tooltip:{trigger:'axis',formatter:function(p){return p[0].name+': $'+p[0].value.toFixed(2);}},
-    grid:{left:55,right:15,top:5,bottom:20},
-    xAxis:{type:'value',axisLabel:{fontSize:9,formatter:'${value}'},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
-    yAxis:{type:'category',data:sw.map(function(d){return d.name;}),axisLabel:{fontSize:9,color:tc},axisLine:{show:false},axisTick:{show:false}},
-    series:[{type:'bar',data:sw.map(function(d){return{value:d.value,itemStyle:{color:d.value>=0?G:R}};}),barWidth:'55%'}]
+    grid:{left:50,right:15,top:10,bottom:50},
+    xAxis:{type:'category',data:sw.map(function(d){return d.name;}),axisLabel:{fontSize:9,rotate:30,color:tc},axisLine:{lineStyle:{color:mc}}},
+    yAxis:{type:'value',axisLabel:{fontSize:9,formatter:'${value}'},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+    series:[{type:'bar',data:sw.map(function(d){return{value:d.value,itemStyle:{color:d.value>=0?G:R}};}),barWidth:'55%',label:{show:true,position:'top',formatter:function(p){return '$'+p.value.toFixed(0);},fontSize:9,color:tc}}]
   }},isDark);
 
   // Waterfall monthly P&L with cumulative line
@@ -1666,11 +1669,11 @@ function initCSCharts(){
         return name+'<br/>'+lines.join('<br/>');
       }},
       legend:{bottom:0,textStyle:{fontSize:10,color:mc}},
-      grid:{left:60,right:15,top:10,bottom:40},
-      xAxis:{type:'value',axisLabel:{formatter:'${value}',fontSize:9},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
-      yAxis:{type:'category',data:sb.map(function(d){return d.name;}).reverse(),axisLabel:{fontSize:10,color:tc},axisLine:{show:false},axisTick:{show:false}},
+      grid:{left:55,right:15,top:10,bottom:45},
+      xAxis:{type:'category',data:sb.map(function(d){return d.name;}),axisLabel:{fontSize:9,rotate:30,color:tc},axisLine:{lineStyle:{color:mc}}},
+      yAxis:{type:'value',axisLabel:{formatter:'${value}',fontSize:9},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
       series:[
-        {name:'净盈亏',type:'bar',stack:'total',data:sb.map(function(d){return{value:d.profit,itemStyle:{color:d.profit>=0?G:R}};}),barWidth:'60%',label:{show:true,position:'right',formatter:function(p){return '$'+p.value.toFixed(0);},fontSize:9,color:tc}},
+        {name:'净盈亏',type:'bar',stack:'total',data:sb.map(function(d){return{value:d.profit,itemStyle:{color:d.profit>=0?G:R}};}),barWidth:'50%',label:{show:true,position:'top',formatter:function(p){return '$'+p.value.toFixed(0);},fontSize:9,color:tc}},
         {name:'隔夜利息',type:'bar',stack:'total',data:sb.map(function(d){return{value:d.swap,itemStyle:{color:O}};})},
         {name:'手续费',type:'bar',stack:'total',data:sb.map(function(d){return{value:d.commission,itemStyle:{color:P}};})}
       ]
