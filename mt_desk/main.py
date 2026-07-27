@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MT Desk v7.2 — Insight-driven trading dashboard with advanced charts."""
+"""MT Desk v9.0 — Insight-driven trading dashboard with advanced charts."""
 import json, io, os, sys, tempfile, tkinter as tk, threading, webbrowser
 from tkinter import filedialog, messagebox
 from datetime import datetime
@@ -395,6 +395,13 @@ def build_dashboard_html(account, trades, stats, cash_flows=None):
     html = html.replace("{CS_HOLDING_TIME_JSON}", holding_time_json)
     html = html.replace("{CS_SWAP_BURDEN_JSON}", swap_burden_json)
     html = html.replace("{CS_CASHFLOW_WATERFALL_JSON}", cf_waterfall_json)
+
+    # ── v9.0 data ──
+    html = html.replace("{MAE_MFE_JSON}", json.dumps(stats.get("mae_mfe_data", []), ensure_ascii=False))
+    html = html.replace("{MONTE_CARLO_JSON}", json.dumps(stats.get("monte_carlo", {}), ensure_ascii=False))
+    html = html.replace("{LEVERAGE_JSON}", json.dumps(stats.get("leverage_data", []), ensure_ascii=False))
+    html = html.replace("{VOL_PL_SCATTER_JSON}", json.dumps(stats.get("vol_pl_scatter", []), ensure_ascii=False))
+    html = html.replace("{HOLDING_PL_DIST_JSON}", json.dumps(stats.get("holding_pl_dist", []), ensure_ascii=False))
     return html
 
 
@@ -493,8 +500,32 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
 @media print{@page{margin:12mm}.header,.date-bar,.toolbar,.theme-btn,.metric-guide,.col-toggle{display:none!important}.chart-box{break-inside:avoid;page-break-inside:avoid}.table-wrap{overflow-x:visible}body{font-size:10pt;background:#fff!important;color:#000!important}.kpi{border:1px solid #ccc!important;background:#fff!important;box-shadow:none}.kpi .val{font-size:14pt}.kpi .lbl,.kpi .tip{color:#666!important}.chart-grid{grid-template-columns:1fr}.section-title{color:#000!important;border-bottom:1px solid #999}.summary-line{background:#f5f5f5!important;border:1px solid #ccc}.summary-card{background:#fff!important;border:1px solid #ccc}.equity-section{margin-bottom:16px}.cs-section,.cs-kpi-row,.cs-toolbar{display:none!important}.cs-kpi-row .kpi{display:none!important}}
 /* CS Audit Mode */
 .cs-section{margin-bottom:18px}.cs-kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 12px;padding:0 clamp(14px,1.4vw,28px)}.kpi-cs{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;text-align:left;box-shadow:0 1px 2px rgba(0,0,0,.05);position:relative}.kpi-cs .lbl{display:block;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}.kpi-cs .val{display:block;font-size:16px;font-weight:700;color:var(--text)}.kpi-cs .sub{display:block;font-size:10px;color:var(--muted);margin-top:2px}.kpi-cs.cs-warn{border-left:3px solid var(--red)}.cs-toolbar{display:flex;align-items:center;gap:6px;padding:6px clamp(14px,1.4vw,28px);background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap}.cs-btn{padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--muted);cursor:pointer;font-size:10px;font-family:inherit}.cs-btn:hover{border-color:var(--blue);color:var(--text)}.cs-btn.active{border-color:var(--blue);color:var(--blue);background:rgba(59,130,246,0.1)}.cs-chart-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:12px 0}.cs-chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:10px 12px 6px;box-shadow:0 1px 2px rgba(0,0,0,.05)}.cs-chart-box-wide{grid-column:span 2}@media(max-width:900px){.cs-kpi-row{grid-template-columns:1fr 1fr}.cs-chart-grid{grid-template-columns:1fr}.cs-chart-box-wide{grid-column:span 1}}@media(max-width:600px){.cs-kpi-row{grid-template-columns:1fr}}
+/* ═══ Tab Navigation ═══ */
+.tab-nav{display:flex;gap:0;padding:0 clamp(14px,1.4vw,28px);background:var(--surface);border-bottom:2px solid var(--border);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tab-nav::-webkit-scrollbar{display:none}
+.tab-btn{padding:10px 18px;border:none;border-bottom:3px solid transparent;background:transparent;color:var(--muted);font-size:clamp(11px,0.9vw,13px);font-weight:600;cursor:pointer;white-space:nowrap;transition:all .2s;font-family:inherit;position:relative}
+.tab-btn:hover{color:var(--text);background:rgba(59,130,246,0.05)}
+.tab-btn.active{color:var(--blue);border-bottom-color:var(--blue);background:rgba(59,130,246,0.08)}
+.tab-btn .tab-icon{margin-right:6px;font-size:14px}
+.tab-panel{display:none;animation:tabFadeIn .3s ease}
+.tab-panel.active{display:block}
+@keyframes tabFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.tab-panel .chart-grid,.tab-panel .summary-row{margin-bottom:clamp(10px,1vw,16px)}
+/* ═══ MAE/MFE Scatter ═══ */
+.scatter-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(10px,1vw,14px);margin-bottom:16px}
+@media(max-width:900px){.scatter-grid{grid-template-columns:1fr}}
+/* ═══ Monte Carlo ═══ */
+.mc-stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.mc-stat{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px;text-align:center;min-width:100px}
+.mc-stat .mc-label{font-size:10px;color:var(--muted);display:block}
+.mc-stat .mc-val{font-size:16px;font-weight:700;color:var(--text)}
+/* ═══ Holding P&L Bar ═══ */
+.holding-pl-bar{display:flex;gap:6px;align-items:flex-end;height:120px;margin-top:8px}
+.holding-pl-seg{flex:1;border-radius:4px 4px 0 0;position:relative;min-height:4px;transition:all .3s}
+.holding-pl-seg:hover{opacity:.85}
+.holding-pl-label{position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:9px;color:var(--muted);white-space:nowrap}
 </style></head><body>
-<div class="header"><h1>MT Desk v7.2 <span>交易習慣分析報表</span></h1>
+<div class="header"><h1>MT Desk v9.0 <span>交易習慣分析報表</span></h1>
 <div style="display:flex;align-items:center;gap:12px">
   <div class="meta"><span id="headerCount">{COUNT}</span> 筆交易 · P/L: <b id="headerPL" style="color:{PL_COLOR}">{PL}</b> · 獲利佔比: <b id="headerWR">{WR}</b></div>
   <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌓</button>
@@ -514,9 +545,18 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
   <button onclick="resetDateFilter()">重置</button>
   <span class="lbl" id="filterInfo"></span>
 </div>
-{CS_KPI_CARDS}
-{CS_FILTER_TOOLBAR}
+<!-- ═══ Tab Navigation ═══ -->
+<div class="tab-nav" id="tabNav">
+  <button class="tab-btn active" onclick="switchTab('dashboard')"><span class="tab-icon">📊</span>Dashboard 總覽</button>
+  <button class="tab-btn" onclick="switchTab('risk')"><span class="tab-icon">🛡️</span>風險與權益</button>
+  <button class="tab-btn" onclick="switchTab('habits')"><span class="tab-icon">🧠</span>交易習慣</button>
+  <button class="tab-btn" onclick="switchTab('mae')"><span class="tab-icon">📐</span>MAE/MFE 點陣</button>
+  <button class="tab-btn" onclick="switchTab('cs')"><span class="tab-icon">🔍</span>CS 風控審計</button>
+</div>
 <div class="main">
+
+<!-- ════════════ Tab 1: Dashboard 總覽 ════════════ -->
+<div class="tab-panel active" id="tab-dashboard">
 <div id="summaryLine" class="summary-line"></div>
 <div class="kpi-row kpi-core-row" id="kpiCore">{CORE_CARDS}</div>
 <div class="equity-section">
@@ -526,7 +566,12 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
   </div>
 </div>
 <div class="kpi-row kpi-sec-row" id="kpiSec">{SEC_CARDS}</div>
-<div class="section-title">📊 交易習慣分析</div>
+{SUMMARY}
+</div>
+
+<!-- ════════════ Tab 2: 風險與權益 ════════════ -->
+<div class="tab-panel" id="tab-risk">
+<div class="section-title">📉 月度/季度盈虧分析</div>
 <div class="chart-grid">
   <div class="chart-box">
     <div class="chart-head"><div class="chart-title">月度盈虧瀑布圖</div><div class="chart-sub">起始權益 → 每月貢獻 → 最終權益</div></div>
@@ -541,10 +586,28 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
     <div id="chart-quarterly-sym" style="width:100%;height:300px"></div>
   </div>
   <div class="chart-box">
-    <div class="chart-head"><div class="chart-title">持倉時間分布</div><div class="chart-sub" id="durationSub"></div></div>
-    <div id="chart-duration" style="width:100%;height:300px"></div>
+    <div class="chart-head"><div class="chart-title">蒙地卡羅模擬</div><div class="chart-sub">1000次隨機洗牌，P5~P95信心區間</div></div>
+    <div id="chart-monte-carlo" style="width:100%;height:300px"></div>
   </div>
+</div>
+<div class="mc-stats" id="mcStats"></div>
+<div class="section-title">⚖️ 槓桿/手數與盈虧相關性</div>
+<div class="chart-grid">
+  <div class="chart-box">
+    <div class="chart-head"><div class="chart-title">手數分桶盈虧分析</div><div class="chart-sub">按手數區間分組的平均盈虧與勝率</div></div>
+    <div id="chart-leverage" style="width:100%;height:300px"></div>
+  </div>
+  <div class="chart-box">
+    <div class="chart-head"><div class="chart-title">手數 vs 盈虧散點圖</div><div class="chart-sub">每筆交易的手數與盈虧分佈</div></div>
+    <div id="chart-vol-pl-scatter" style="width:100%;height:300px"></div>
+  </div>
+</div>
+</div>
 
+<!-- ════════════ Tab 3: 交易習慣 ════════════ -->
+<div class="tab-panel" id="tab-habits">
+<div class="section-title">🕐 時間維度分析</div>
+<div class="chart-grid">
   <div class="chart-box">
     <div class="chart-head"><div class="chart-title">交易時段熱力圖</div><div class="chart-sub">星期 × 小時：顏色越深 = 筆數越多</div></div>
     <div id="chart-heatmap" style="width:100%;height:300px"></div>
@@ -554,32 +617,82 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
     <div id="chart-session-radar" style="width:100%;height:320px"></div>
   </div>
   <div class="chart-box">
+    <div class="chart-head"><div class="chart-title">持倉時間分佈</div><div class="chart-sub" id="durationSub"></div></div>
+    <div id="chart-duration" style="width:100%;height:300px"></div>
+  </div>
+  <div class="chart-box">
+    <div class="chart-head"><div class="chart-title">持倉時間盈虧分佈</div><div class="chart-sub">各時間段的累計盈虧與交易筆數</div></div>
+    <div id="chart-holding-pl" style="width:100%;height:300px"></div>
+  </div>
+</div>
+<div class="section-title">💱 品種維度分析</div>
+<div class="chart-grid">
+  <div class="chart-box">
     <div class="chart-head"><div class="chart-title">品種綜合矩陣</div><div class="chart-sub">X=交易次數 · Y=獲利佔比 · 大小=盈虧貢獻</div></div>
     <div id="chart-sym-bubble" style="width:100%;height:300px"></div>
   </div>
-</div>
-{SUMMARY}
-<div class="cs-section">
-  <div class="section-title" style="margin-top:20px">🔍 CS 客服审计图表</div>
-  <div class="cs-chart-grid">
-    <div class="cs-chart-box">
-      <div class="chart-head"><div class="chart-title">平仓原因归因</div></div>
-      <div id="chart-close-reason" style="width:100%;height:260px"></div>
-    </div>
-    <div class="cs-chart-box">
-      <div class="chart-head"><div class="chart-title">持仓时长分布</div><div class="chart-sub">秒级分桶</div></div>
-      <div id="chart-holding-time" style="width:100%;height:260px"></div>
-    </div>
-    <div class="cs-chart-box">
-      <div class="chart-head"><div class="chart-title">品种Swap负担</div><div class="chart-sub">盈亏 vs Swap vs 佣金</div></div>
-      <div id="chart-swap-burden" style="width:100%;height:260px"></div>
-    </div>
-    <div class="cs-chart-box cs-chart-box-wide">
-      <div class="chart-head"><div class="chart-title">出入金瀑布图</div></div>
-      <div id="chart-cashflow-waterfall" style="width:100%;height:260px"></div>
-    </div>
+  <div class="chart-box">
+    <div class="chart-head"><div class="chart-title">品種盈虧貢獻</div></div>
+    <div id="chart-symbol-pl" style="width:100%;height:280px"></div>
   </div>
 </div>
+</div>
+
+<!-- ════════════ Tab 4: MAE/MFE 點陣 ════════════ -->
+<div class="tab-panel" id="tab-mae">
+<div class="section-title">📐 MAE / MFE 最佳化分析</div>
+<div style="font-size:12px;color:var(--muted);margin-bottom:12px;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius)">
+  <b>MAE</b>（最大不利偏移）= 平倉前曾浮虧多少 · <b>MFE</b>（最大有利偏移）= 平倉前曾浮盈多少 · 評估停損點是否設得太寬、是否有及時獲利出場
+</div>
+<div class="scatter-grid">
+  <div class="chart-box">
+    <div class="chart-head"><div class="chart-title">MAE 散點圖</div><div class="chart-sub">X=交易序號 · Y=最大浮虧金額 · 顏色=盈虧</div></div>
+    <div id="chart-mae" style="width:100%;height:350px"></div>
+  </div>
+  <div class="chart-box">
+    <div class="chart-head"><div class="chart-title">MFE 散點圖</div><div class="chart-sub">X=交易序號 · Y=最大浮盈金額 · 顏色=盈虧</div></div>
+    <div id="chart-mfe" style="width:100%;height:350px"></div>
+  </div>
+</div>
+<div class="chart-grid">
+  <div class="chart-box">
+    <div class="chart-head"><div class="chart-title">MAE vs MFE 分佈</div><div class="chart-sub">X=MAE · Y=MFE · 氣泡=盈虧金額</div></div>
+    <div id="chart-mae-mfe-scatter" style="width:100%;height:350px"></div>
+  </div>
+  <div class="chart-box">
+    <div class="chart-head"><div class="chart-title">MAE/MFE 統計摘要</div></div>
+    <div id="mae-mfe-summary" style="padding:16px;font-size:13px;line-height:2;color:var(--text)"></div>
+  </div>
+</div>
+</div>
+
+<!-- ════════════ Tab 5: CS 風控審計 ════════════ -->
+<div class="tab-panel" id="tab-cs">
+{CS_KPI_CARDS}
+{CS_FILTER_TOOLBAR}
+<div class="section-title">🔍 CS 客服审计图表</div>
+<div class="cs-chart-grid">
+  <div class="cs-chart-box">
+    <div class="chart-head"><div class="chart-title">平仓原因归因</div></div>
+    <div id="chart-close-reason" style="width:100%;height:260px"></div>
+  </div>
+  <div class="cs-chart-box">
+    <div class="chart-head"><div class="chart-title">持仓时长分布</div><div class="chart-sub">秒级分桶</div></div>
+    <div id="chart-holding-time" style="width:100%;height:260px"></div>
+  </div>
+  <div class="cs-chart-box">
+    <div class="chart-head"><div class="chart-title">品种Swap负担</div><div class="chart-sub">盈亏 vs Swap vs 佣金</div></div>
+    <div id="chart-swap-burden" style="width:100%;height:260px"></div>
+  </div>
+  <div class="cs-chart-box cs-chart-box-wide">
+    <div class="chart-head"><div class="chart-title">出入金瀑布图</div></div>
+    <div id="chart-cashflow-waterfall" style="width:100%;height:260px"></div>
+  </div>
+</div>
+</div>
+<!-- End CS tab -->
+
+</div><!-- end .main -->
 <div class="section-title">📋 逐筆明細</div>
 <div class="toolbar"><input type="text" id="searchBox" placeholder="搜尋 Ticket / 品種 / 日期..." oninput="doSearch()">
 <span id="searchInfo" style="font-size:clamp(10px,0.8vw,13px);color:var(--muted)"></span><span style="flex:1"></span>
@@ -632,10 +745,37 @@ var CS_CLOSE_REASON={CS_CLOSE_REASON_JSON};
 var CS_HOLDING_TIME={CS_HOLDING_TIME_JSON};
 var CS_SWAP_BURDEN={CS_SWAP_BURDEN_JSON};
 var CS_CASHFLOW_WATERFALL={CS_CASHFLOW_WATERFALL_JSON};
+var MAE_MFE_DATA={MAE_MFE_JSON};
+var MONTE_CARLO={MONTE_CARLO_JSON};
+var LEVERAGE_DATA={LEVERAGE_JSON};
+var VOL_PL_SCATTER={VOL_PL_SCATTER_JSON};
+var HOLDING_PL_DIST={HOLDING_PL_DIST_JSON};
 
 (function(){var s=localStorage.getItem('mt-theme');var m=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',s||m);})();
 window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(e){if(!localStorage.getItem('mt-theme')){document.documentElement.setAttribute('data-theme',e.matches?'dark':'light');initAllCharts();}});
-function toggleTheme(){var c=document.documentElement.getAttribute('data-theme');var n=c==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('mt-theme',n);initAllCharts();}
+function toggleTheme(){var c=document.documentElement.getAttribute('data-theme');var n=c==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('mt-theme',n);initAllCharts();initNewCharts();initMAECharts();}
+
+// ═══ Tab Switching ═══
+function switchTab(tabId){
+  document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
+  document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
+  var panel=document.getElementById('tab-'+tabId);
+  if(panel)panel.classList.add('active');
+  var btns=document.querySelectorAll('.tab-btn');
+  var tabs=['dashboard','risk','habits','mae','cs'];
+  var idx=tabs.indexOf(tabId);
+  if(idx>=0&&btns[idx])btns[idx].classList.add('active');
+  // Resize charts in the newly visible tab
+  setTimeout(function(){
+    var charts=panel?panel.querySelectorAll('[id^="chart-"]'):[];
+    charts.forEach(function(el){if(el._ec)el._ec.resize();});
+    // Init new charts if switching to their tab
+    if(tabId==='risk')initNewCharts();
+    if(tabId==='mae')initMAECharts();
+    if(tabId==='habits')initHabitsCharts();
+    if(tabId==='cs')initCSCharts();
+  },50);
+}
 
 function ecOpt(o,isDark){
   var el=document.getElementById(o.id);
@@ -887,11 +1027,11 @@ function initAllCharts(){
   }
 }
 window.addEventListener('resize',function(){
-  ['chart-symbol-pie','chart-symbol-pl','chart-volume-donut','chart-swap-bar','chart-waterfall','chart-ls-monthly','chart-quarterly-sym','chart-duration','chart-equity','chart-heatmap','chart-session-radar','chart-sym-bubble'].forEach(function(id){
+  ['chart-symbol-pie','chart-symbol-pl','chart-volume-donut','chart-swap-bar','chart-waterfall','chart-ls-monthly','chart-quarterly-sym','chart-duration','chart-equity','chart-heatmap','chart-session-radar','chart-sym-bubble','chart-monte-carlo','chart-leverage','chart-vol-pl-scatter','chart-holding-pl','chart-mae','chart-mfe','chart-mae-mfe-scatter','chart-close-reason','chart-holding-time','chart-swap-burden','chart-cashflow-waterfall'].forEach(function(id){
     var el=document.getElementById(id);if(el&&el._ec)el._ec.resize();
   });
 });
-initAllCharts();renderInsights();renderQuickInsights();
+initAllCharts();renderInsights();renderQuickInsights();initNewCharts();
 // Single-symbol pie check
 (function(){
   var total=SYM_PIE_DATA.reduce(function(a,b){return a+b.value;},0);
@@ -1057,6 +1197,262 @@ function applyCurrentFilter(){var df=document.getElementById('dateFrom').value;v
 document.getElementById('searchBox').addEventListener('keydown',function(e){if(e.key==='Enter'&&searchMatches.length>0){e.preventDefault();searchIdx=(searchIdx+1)%searchMatches.length;var gi=searchMatches[searchIdx];currentPage=Math.floor(gi/pageSize)+1;renderTable();setTimeout(function(){var rows=document.querySelectorAll('#tradeBody tr');rows.forEach(function(r){r.classList.remove('highlight');});var li=gi%pageSize;if(rows[li]){rows[li].classList.add('highlight');rows[li].scrollIntoView({behavior:'smooth',block:'center'});}document.getElementById('searchInfo').textContent=(searchIdx+1)+'/'+searchMatches.length+' 條匹配';},30);}});
 function renderTable(){totalPages=Math.ceil(data.length/pageSize)||1;if(currentPage>totalPages)currentPage=totalPages;var start=(currentPage-1)*pageSize;var page=data.slice(start,start+pageSize);var h='';page.forEach(function(t){var dirCls=t.type==='BUY'?'buy':'sell';var plCls=t.profit>0?'win':'loss';var volFixed=t.volume!==undefined?Number(t.volume).toFixed(2):'0.00';h+='<tr><td>'+t.ticket+'</td><td>'+t.open+'</td><td><span class=\"dir-badge '+dirCls+'\">'+t.type+'</span></td><td class=\"vol-num\">'+volFixed+'</td><td>'+t.symbol+'</td><td>'+(t.open_price||'-')+'</td><td class=\"col-extra\">'+t.close+'</td><td class=\"col-extra\">'+(t.close_price||'-')+'</td><td>'+(t.duration_str||'-')+'</td><td><span class=\"pl-badge '+plCls+'\">$'+t.profit_per_lot.toFixed(2)+'</span></td><td>$'+(t.swap||0).toFixed(2)+'</td><td><span class=\"pl-badge '+plCls+'\">$'+t.profit.toFixed(2)+'</span></td></tr>';});document.getElementById('tradeBody').innerHTML=h;var info=currentPage+'/'+totalPages+' ('+data.length+'筆)';document.getElementById('pageInfo').textContent=info;document.getElementById('pageInfo2').textContent=info;}
 renderTable();document.getElementById('sa-profit').textContent='▼';updateSummaryLine(ALL_TRADES.length,ALL_TRADES.filter(function(t){return t.profit>0;}).length,ALL_TRADES.reduce(function(a,t){return a+t.profit;},0));
+
+// ═══ v9.0 New Charts: Monte Carlo, Leverage, Holding PL ═══
+function initNewCharts(){
+  var isDark=document.documentElement.getAttribute('data-theme')==='dark';
+  var tc=isDark?'#e8ecf4':'#1e293b';
+  var mc=isDark?'#7b879c':'#64748b';
+  var G=isDark?'#22c55e':'#16a34a';
+  var R=isDark?'#ef4444':'#dc2626';
+  var B=isDark?'#3b82f6':'#2563eb';
+  var Y=isDark?'#eab308':'#ca8a04';
+  var O='#f59e0b';
+  var P='#8b5cf6';
+
+  // 1) Monte Carlo Simulation
+  (function(){
+    var el=document.getElementById('chart-monte-carlo');
+    if(!el||!MONTE_CARLO||!MONTE_CARLO.n_sims)return;
+    try{if(el._ec){el._ec.dispose();}el._ec=null;}catch(e){}
+    var mc=MONTE_CARLO;
+    var n=mc.n_trades;
+    var xLabels=[];for(var i=1;i<=n;i++)xLabels.push(i);
+    var bands=mc.bands;
+    var series=[
+      {name:'P5',type:'line',data:bands['5']||[],symbol:'none',lineStyle:{width:1,color:isDark?'rgba(239,68,68,0.4)':'rgba(220,38,38,0.3)'},areaStyle:null,stack:'band1',z:1},
+      {name:'P25-P5',type:'line',data:(bands['25']||[]).map(function(v,i){return v-(bands['5']?bands['5'][i]:0);}),symbol:'none',lineStyle:{width:0},areaStyle:{color:isDark?'rgba(239,68,68,0.15)':'rgba(220,38,38,0.08)'},stack:'band1',z:2},
+      {name:'P50',type:'line',data:bands['50']||[],symbol:'none',lineStyle:{width:2,color:Y,type:'dashed'},z:5},
+      {name:'P75-P50',type:'line',data:(bands['75']||[]).map(function(v,i){return v-(bands['50']?bands['50'][i]:0);}),symbol:'none',lineStyle:{width:0},areaStyle:{color:isDark?'rgba(34,197,94,0.15)':'rgba(22,163,74,0.08)'},stack:'band2',z:2},
+      {name:'P95',type:'line',data:(bands['95']||[]).map(function(v,i){return v-(bands['75']?bands['75'][i]:0);}),symbol:'none',lineStyle:{width:1,color:isDark?'rgba(34,197,94,0.4)':'rgba(22,163,74,0.3)'},stack:'band2',z:1},
+      {name:'實際曲線',type:'line',data:mc.actual_curve,symbol:'none',lineStyle:{color:B,width:2.5},z:10}
+    ];
+    var chart=echarts.init(el,isDark?'dark':null);
+    chart.setOption({
+      tooltip:{trigger:'axis',formatter:function(p){
+        var actual=p.find(function(s){return s.seriesName==='實際曲線';});
+        return (actual?p[0].name+'筆交易':'第'+p[0].name+'筆')+(actual?'<br/>實際: $'+actual.value.toFixed(2):'');
+      }},
+      legend:{bottom:0,textStyle:{fontSize:9,color:tc},data:['P5','P50','P95','實際曲線']},
+      grid:{left:60,right:15,top:15,bottom:40},
+      xAxis:{type:'category',data:xLabels,name:'交易序號',nameTextStyle:{fontSize:9,color:mc},axisLabel:{fontSize:9,color:tc},axisLine:{lineStyle:{color:mc}}},
+      yAxis:{type:'value',name:'累計盈虧 ($)',nameTextStyle:{fontSize:9,color:mc},axisLabel:{fontSize:9,formatter:'${value}'},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+      series:series
+    });
+    el._ec=chart;
+    // Stats
+    var statsEl=document.getElementById('mcStats');
+    if(statsEl&&mc.percentiles){
+      var p=mc.percentiles;
+      statsEl.innerHTML=
+        '<div class="mc-stat"><span class="mc-label">P5 (worst 5%)</span><span class="mc-val" style="color:var(--red)">$'+(p.p5||0).toFixed(0)+'</span></div>'+
+        '<div class="mc-stat"><span class="mc-label">P25</span><span class="mc-val">$'+(p.p25||0).toFixed(0)+'</span></div>'+
+        '<div class="mc-stat"><span class="mc-label">P50 (中位數)</span><span class="mc-val" style="color:var(--blue)">$'+(p.p50||0).toFixed(0)+'</span></div>'+
+        '<div class="mc-stat"><span class="mc-label">P75</span><span class="mc-val">$'+(p.p75||0).toFixed(0)+'</span></div>'+
+        '<div class="mc-stat"><span class="mc-label">P95 (best 5%)</span><span class="mc-val" style="color:var(--green)">$'+(p.p95||0).toFixed(0)+'</span></div>';
+    }
+  })();
+
+  // 2) Leverage bucket bar chart
+  (function(){
+    var el=document.getElementById('chart-leverage');
+    if(!el||!LEVERAGE_DATA||!LEVERAGE_DATA.length)return;
+    try{if(el._ec){el._ec.dispose();}el._ec=null;}catch(e){}
+    var chart=echarts.init(el,isDark?'dark':null);
+    chart.setOption({
+      tooltip:{trigger:'axis',formatter:function(p){
+        var idx=p[0].dataIndex;var d=LEVERAGE_DATA[idx];
+        return d.bucket+' 手<br/>交易: '+d.count+' 筆<br/>平均手數: '+d.avg_volume+'<br/>平均盈虧: $'+d.avg_pl.toFixed(2)+'<br/>勝率: '+d.win_rate+'%';
+      }},
+      legend:{bottom:0,textStyle:{fontSize:10,color:tc}},
+      grid:{left:60,right:60,top:15,bottom:40},
+      xAxis:{type:'category',data:LEVERAGE_DATA.map(function(d){return d.bucket;}),axisLabel:{fontSize:9,color:tc},axisLine:{lineStyle:{color:mc}}},
+      yAxis:[
+        {type:'value',name:'平均盈虧 ($)',nameTextStyle:{fontSize:9,color:mc},axisLabel:{fontSize:9,formatter:'${value}'},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+        {type:'value',name:'勝率 (%)',nameTextStyle:{fontSize:9,color:mc},axisLabel:{formatter:'{value}%'},max:100}
+      ],
+      series:[
+        {name:'平均盈虧',type:'bar',data:LEVERAGE_DATA.map(function(d){return{value:d.avg_pl,itemStyle:{color:d.avg_pl>=0?G:R}};}),barWidth:'50%',label:{show:true,position:'top',formatter:function(p){return '$'+p.value.toFixed(0);},fontSize:9,color:tc}},
+        {name:'勝率',type:'line',yAxisIndex:1,data:LEVERAGE_DATA.map(function(d){return d.win_rate;}),itemStyle:{color:Y},symbol:'circle',symbolSize:6,lineStyle:{width:2}}
+      ]
+    });
+    el._ec=chart;
+  })();
+
+  // 3) Volume vs P&L scatter
+  (function(){
+    var el=document.getElementById('chart-vol-pl-scatter');
+    if(!el||!VOL_PL_SCATTER||!VOL_PL_SCATTER.length)return;
+    try{if(el._ec){el._ec.dispose();}el._ec=null;}catch(e){}
+    var chart=echarts.init(el,isDark?'dark':null);
+    chart.setOption({
+      tooltip:{formatter:function(p){return p.data[3]+'<br/>手數: '+p.data[0]+'<br/>盈虧: $'+p.data[1].toFixed(2);}},
+      grid:{left:65,right:20,top:15,bottom:25},
+      xAxis:{type:'value',name:'手數',nameTextStyle:{fontSize:9,color:mc},axisLabel:{fontSize:9},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+      yAxis:{type:'value',name:'盈虧 ($)',nameTextStyle:{fontSize:9,color:mc},axisLabel:{fontSize:9,formatter:'${value}'},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+      series:[{
+        type:'scatter',
+        symbolSize:function(d){return Math.max(6,Math.min(30,Math.sqrt(Math.abs(d[1]))*2));},
+        data:VOL_PL_SCATTER.map(function(d){return[d.volume,d.profit,0,d.symbol];}),
+        itemStyle:{color:function(p){return p.data[1]>=0?G:R;},opacity:0.7},
+        label:{show:false}
+      }],
+      markLine:{silent:true,data:[{yAxis:0,label:{formatter:'盈虧平衡線',fontSize:9},lineStyle:{color:'#f59e0b',type:'dashed'}}]}
+    });
+    el._ec=chart;
+  })();
+
+  // 4) Holding Time P&L Distribution
+  (function(){
+    var el=document.getElementById('chart-holding-pl');
+    if(!el||!HOLDING_PL_DIST||!HOLDING_PL_DIST.length)return;
+    try{if(el._ec){el._ec.dispose();}el._ec=null;}catch(e){}
+    var chart=echarts.init(el,isDark?'dark':null);
+    chart.setOption({
+      tooltip:{trigger:'axis',formatter:function(p){
+        var idx=p[0].dataIndex;var d=HOLDING_PL_DIST[idx];
+        return d.bucket+'<br/>交易: '+d.count+' 筆<br/>累計盈虧: $'+d.total_pl.toFixed(2);
+      }},
+      grid:{left:60,right:15,top:15,bottom:25},
+      xAxis:{type:'category',data:HOLDING_PL_DIST.map(function(d){return d.bucket;}),axisLabel:{fontSize:9,color:tc},axisLine:{lineStyle:{color:mc}}},
+      yAxis:{type:'value',name:'累計盈虧 ($)',nameTextStyle:{fontSize:9,color:mc},axisLabel:{fontSize:9,formatter:'${value}'},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+      series:[{type:'bar',data:HOLDING_PL_DIST.map(function(d){return{value:d.total_pl,itemStyle:{color:d.total_pl>=0?G:R}};}),barWidth:'55%',label:{show:true,position:'top',formatter:function(p){return '$'+p.value.toFixed(0);},fontSize:9,color:tc}}]
+    });
+    el._ec=chart;
+  })();
+}
+
+// ═══ v9.0 MAE/MFE Charts ═══
+function initMAECharts(){
+  var isDark=document.documentElement.getAttribute('data-theme')==='dark';
+  var tc=isDark?'#e8ecf4':'#1e293b';
+  var mc=isDark?'#7b879c':'#64748b';
+  var G=isDark?'#22c55e':'#16a34a';
+  var R=isDark?'#ef4444':'#dc2626';
+  var B=isDark?'#3b82f6':'#2563eb';
+
+  if(!MAE_MFE_DATA||!MAE_MFE_DATA.length)return;
+
+  // 1) MAE scatter
+  (function(){
+    var el=document.getElementById('chart-mae');
+    if(!el)return;
+    try{if(el._ec){el._ec.dispose();}el._ec=null;}catch(e){}
+    var data=MAE_MFE_DATA.map(function(d,i){return[i+1,d.mae,d.profit,d.symbol];});
+    var chart=echarts.init(el,isDark?'dark':null);
+    chart.setOption({
+      tooltip:{formatter:function(p){return '#'+p.data[0]+' '+p.data[3]+'<br/>MAE: $'+p.data[1].toFixed(2)+'<br/>最終盈虧: $'+p.data[2].toFixed(2);}},
+      grid:{left:65,right:20,top:15,bottom:30},
+      xAxis:{type:'value',name:'交易序號',nameTextStyle:{fontSize:9,color:mc},axisLabel:{fontSize:9},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+      yAxis:{type:'value',name:'MAE ($)',nameTextStyle:{fontSize:9,color:mc},axisLabel:{fontSize:9,formatter:'${value}'},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+      series:[{type:'scatter',symbolSize:function(d){return Math.max(5,Math.min(20,Math.sqrt(d[1])*2));},data:data,itemStyle:{color:function(p){return p.data[2]>=0?G:R;},opacity:0.7}}]
+    });
+    el._ec=chart;
+  })();
+
+  // 2) MFE scatter
+  (function(){
+    var el=document.getElementById('chart-mfe');
+    if(!el)return;
+    try{if(el._ec){el._ec.dispose();}el._ec=null;}catch(e){}
+    var data=MAE_MFE_DATA.map(function(d,i){return[i+1,d.mfe,d.profit,d.symbol];});
+    var chart=echarts.init(el,isDark?'dark':null);
+    chart.setOption({
+      tooltip:{formatter:function(p){return '#'+p.data[0]+' '+p.data[3]+'<br/>MFE: $'+p.data[1].toFixed(2)+'<br/>最終盈虧: $'+p.data[2].toFixed(2);}},
+      grid:{left:65,right:20,top:15,bottom:30},
+      xAxis:{type:'value',name:'交易序號',nameTextStyle:{fontSize:9,color:mc},axisLabel:{fontSize:9},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+      yAxis:{type:'value',name:'MFE ($)',nameTextStyle:{fontSize:9,color:mc},axisLabel:{fontSize:9,formatter:'${value}'},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+      series:[{type:'scatter',symbolSize:function(d){return Math.max(5,Math.min(20,Math.sqrt(d[1])*2));},data:data,itemStyle:{color:function(p){return p.data[2]>=0?G:R;},opacity:0.7}}]
+    });
+    el._ec=chart;
+  })();
+
+  // 3) MAE vs MFE bubble
+  (function(){
+    var el=document.getElementById('chart-mae-mfe-scatter');
+    if(!el)return;
+    try{if(el._ec){el._ec.dispose();}el._ec=null;}catch(e){}
+    var data=MAE_MFE_DATA.map(function(d){return[d.mae,d.mfe,d.profit,d.symbol];});
+    var chart=echarts.init(el,isDark?'dark':null);
+    chart.setOption({
+      tooltip:{formatter:function(p){return p.data[3]+'<br/>MAE: $'+p.data[0].toFixed(2)+'<br/>MFE: $'+p.data[1].toFixed(2)+'<br/>盈虧: $'+p.data[2].toFixed(2);}},
+      grid:{left:65,right:20,top:15,bottom:30},
+      xAxis:{type:'value',name:'MAE ($)',nameTextStyle:{fontSize:9,color:mc},axisLabel:{fontSize:9,formatter:'${value}'},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+      yAxis:{type:'value',name:'MFE ($)',nameTextStyle:{fontSize:9,color:mc},axisLabel:{fontSize:9,formatter:'${value}'},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+      series:[{
+        type:'scatter',
+        symbolSize:function(d){return Math.max(6,Math.min(30,Math.sqrt(Math.abs(d[2]))*2));},
+        data:data,
+        itemStyle:{color:function(p){return p.data[2]>=0?G:R;},opacity:0.7},
+        label:{show:false}
+      }],
+      markLine:{silent:true,data:[
+        {xAxis:0,lineStyle:{color:mc,type:'dashed',width:1}},
+        {yAxis:0,lineStyle:{color:mc,type:'dashed',width:1}}
+      ]}
+    });
+    el._ec=chart;
+  })();
+
+  // 4) MAE/MFE Summary stats
+  (function(){
+    var el=document.getElementById('mae-mfe-summary');
+    if(!el)return;
+    var maeVals=MAE_MFE_DATA.map(function(d){return d.mae;});
+    var mfeVals=MAE_MFE_DATA.map(function(d){return d.mfe;});
+    var avgMAE=maeVals.reduce(function(a,b){return a+b;},0)/maeVals.length;
+    var avgMFE=mfeVals.reduce(function(a,b){return a+b;},0)/mfeVals.length;
+    var maxMAE=Math.max.apply(null,maeVals);
+    var maxMFE=Math.max.apply(null,mfeVals);
+    var wins=MAE_MFE_DATA.filter(function(d){return d.profit>0;});
+    var losses=MAE_MFE_DATA.filter(function(d){return d.profit<=0;});
+    var avgWinMAE=wins.length?wins.reduce(function(a,d){return a+d.mae;},0)/wins.length:0;
+    var avgLossMAE=losses.length?losses.reduce(function(a,d){return a+d.mae;},0)/losses.length:0;
+    var avgWinMFE=wins.length?wins.reduce(function(a,d){return a+d.mfe;},0)/wins.length:0;
+    var avgLossMFE=losses.length?losses.reduce(function(a,d){return a+d.mfe;},0)/losses.length:0;
+    el.innerHTML=
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">'+
+      '<div><b>📊 全部交易 ('+MAE_MFE_DATA.length+' 筆)</b><br>'+
+      '平均 MAE: <b style="color:var(--red)">$'+avgMAE.toFixed(2)+'</b><br>'+
+      '平均 MFE: <b style="color:var(--green)">$'+avgMFE.toFixed(2)+'</b><br>'+
+      '最大 MAE: <b style="color:var(--red)">$'+maxMAE.toFixed(2)+'</b><br>'+
+      '最大 MFE: <b style="color:var(--green)">$'+maxMFE.toFixed(2)+'</b></div>'+
+      '<div><b>📈 盈虧分組對比</b><br>'+
+      '赢单平均 MAE: <b style="color:var(--red)">$'+avgWinMAE.toFixed(2)+'</b><br>'+
+      '亏单平均 MAE: <b style="color:var(--red)">$'+avgLossMAE.toFixed(2)+'</b><br>'+
+      '赢单平均 MFE: <b style="color:var(--green)">$'+avgWinMFE.toFixed(2)+'</b><br>'+
+      '亏单平均 MFE: <b style="color:var(--green)">$'+avgLossMFE.toFixed(2)+'</b></div>'+
+      '</div>'+
+      '<div style="margin-top:12px;padding:8px 12px;background:var(--surface);border-radius:6px;font-size:11px;color:var(--muted)">'+
+      '💡 <b>解讀提示：</b>如果亏单的平均 MAE 遠大於平均虧損金額，說明停損點設得太寬；'+
+      '如果赢单的平均 MFE 遠大於平均盈利金額，說明未能及時獲利出場。'+
+      '</div>';
+  })();
+
+  // 5) Holding PL Distribution (also in habits tab)
+  (function(){
+    var el=document.getElementById('chart-holding-pl');
+    if(!el||!HOLDING_PL_DIST||!HOLDING_PL_DIST.length)return;
+    try{if(el._ec){el._ec.dispose();}el._ec=null;}catch(e){}
+    var chart=echarts.init(el,isDark?'dark':null);
+    chart.setOption({
+      tooltip:{trigger:'axis',formatter:function(p){
+        var idx=p[0].dataIndex;var d=HOLDING_PL_DIST[idx];
+        return d.bucket+'<br/>交易: '+d.count+' 筆<br/>累計盈虧: $'+d.total_pl.toFixed(2);
+      }},
+      grid:{left:60,right:15,top:15,bottom:25},
+      xAxis:{type:'category',data:HOLDING_PL_DIST.map(function(d){return d.bucket;}),axisLabel:{fontSize:9,color:tc},axisLine:{lineStyle:{color:mc}}},
+      yAxis:{type:'value',name:'累計盈虧 ($)',nameTextStyle:{fontSize:9,color:mc},axisLabel:{fontSize:9,formatter:'${value}'},splitLine:{lineStyle:{color:isDark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)'}}},
+      series:[{type:'bar',data:HOLDING_PL_DIST.map(function(d){return{value:d.total_pl,itemStyle:{color:d.total_pl>=0?G:R}};}),barWidth:'55%',label:{show:true,position:'top',formatter:function(p){return '$'+p.value.toFixed(0);},fontSize:9,color:tc}}]
+    });
+    el._ec=chart;
+  })();
+}
+
+// ═══ Habits Charts (symbol PL bar + holding PL) ═══
+function initHabitsCharts(){
+  initNewCharts(); // reuse holding PL chart
+}
 
 // ── v8.0 CS Audit Charts ──
 function initCSCharts(){
@@ -1293,11 +1689,11 @@ def process_file(path):
 
 def main():
     root = tk.Tk()
-    root.title("MT Desk v7.2")
+    root.title("MT Desk v9.0")
     root.geometry("400x260")
     root.configure(bg="#f4f6f9")
     root.resizable(False, False)
-    tk.Label(root, text="MT Desk v7.2", font=("Segoe UI", 22, "bold"), fg="#2563eb", bg="#f4f6f9").pack(pady=(24, 4))
+    tk.Label(root, text="MT Desk v9.0", font=("Segoe UI", 22, "bold"), fg="#2563eb", bg="#f4f6f9").pack(pady=(24, 4))
     tk.Label(root, text="洞察驅動交易習慣分析報表 · ECharts 進階圖表", font=("Segoe UI", 10), fg="#6b7280", bg="#f4f6f9").pack(pady=(0, 20))
     status_var = tk.StringVar(value="選擇 HTML 報表檔案")
     status = tk.Label(root, textvariable=status_var, font=("Segoe UI", 9), fg="#6b7280", bg="#f4f6f9")

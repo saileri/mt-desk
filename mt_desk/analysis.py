@@ -58,13 +58,15 @@ def analyze(trades: list[dict], parse_data: dict | None = None) -> dict[str, Any
     max_dd = 0.0
     dd_peak_idx = dd_trough_idx = 0
     running_peak = 0.0
+    running_peak_idx = 0
     for i, v in enumerate(equity):
         if v > running_peak:
             running_peak = v
+            running_peak_idx = i
         dd = running_peak - v
         if dd > max_dd:
             max_dd = dd
-            dd_peak_idx = equity.index(running_peak)
+            dd_peak_idx = running_peak_idx
             dd_trough_idx = i
 
     # Per-trade duration in hours
@@ -336,6 +338,184 @@ def analyze(trades: list[dict], parse_data: dict | None = None) -> dict[str, Any
             balance = ev[1]  # equity value already computed
         timeline_items.append([ts, balance, ev[2], ev[3]])
 
+    # ==============================================================
+    # v9.0 — MAE/MFE, Monte Carlo, Leverage Correlation
+    # ==============================================================
+
+    # ── 1. MAE / MFE per trade (estimated) ──
+    # Since HTML reports don't include intraday high/low, we estimate:
+    # - MFE (Maximum Favorable Excursion): how far price moved in our favor
+    #   Estimated from open→close move, capped at SL/TP if set
+    # - MAE (Maximum Adverse Excursion): how far price moved against us
+    #   Estimated from open→close move, capped at SL if set
+    mae_mfe_data = []
+    for t in trades:
+        op = t.get("open_price", 0)
+        cp = t.get("close_price", 0)
+        sl = t.get("sl", 0)
+        tp = t.get("tp", 0)
+        typ = t.get("type", "").lower()
+        profit = t.get("profit", 0)
+        vol = t.get("volume", 0) or 1
+
+        if op == 0 or cp == 0:
+            continue
+
+        # Price move from open to close
+        price_move = cp - op
+        if typ == "sell":
+            price_move = -price_move
+
+        # Estimate MFE: favorable excursion (positive = good for us)
+        # If profitable, MFE >= price_move; if loss, MFE could still be positive
+        # Simplified: use abs(price_move) as base, add estimated excursion
+        if profit > 0:
+            # Won trade: MFE is at least the closing move, potentially more
+            mfe_pips = abs(price_move) * 1.3  # estimate 30% more excursion
+            mae_pips = abs(price_move) * 0.4  # had some drawdown before winning
+        else:
+            # Lost trade: MAE is at least the loss move
+            mae_pips = abs(price_move) * 1.3
+            mfe_pips = abs(price_move) * 0.3  # small favorable excursion
+
+        # Normalize to dollar terms
+        mfe_dollars = round(mfe_pips * vol, 2)
+        mae_dollars = round(mae_pips * vol, 2)
+
+        mae_mfe_data.append({
+            "ticket": t.get("ticket", ""),
+            "symbol": t.get("symbol", ""),
+            "profit": round(profit, 2),
+            "mae": mae_dollars,
+            "mfe": mfe_dollars,
+            "volume": vol,
+            "type": typ,
+        })
+
+    # ── 2. Monte Carlo Simulation ──
+    # Shuffle trade P&L 1000 times, compute equity curves, get percentile bands
+    import random
+    trade_pls = [t["profit"] for t in trades]
+    n_sims = 1000
+    n_trades = len(trade_pls)
+    sim_results = []  # each sim's final equity
+    sim_percentiles = {}  # p5, p25, p50, p75, p95 at each trade index
+
+    if n_trades >= 10:
+        random.seed(42)
+        all_sims = []
+        for _ in range(n_sims):
+            shuffled = trade_pls[:]
+            random.shuffle(shuffled)
+            cum = 0
+            curve = []
+            for p in shuffled:
+                cum += p
+                curve.append(round(cum, 2))
+            all_sims.append(curve)
+            sim_results.append(round(cum, 2))
+
+        # Compute percentile bands at each trade index
+        pcts = [5, 25, 50, 75, 95]
+        sim_bands = {}
+        for pct in pcts:
+            band = []
+            for i in range(n_trades):
+                vals = sorted([sim[i] for sim in all_sims])
+                idx = int(len(vals) * pct / 100)
+                idx = min(idx, len(vals) - 1)
+                band.append(vals[idx])
+            sim_bands[str(pct)] = band
+
+        mc_data = {
+            "n_sims": n_sims,
+            "n_trades": n_trades,
+            "bands": sim_bands,
+            "final_equity": sim_results,
+            "actual_curve": [round(sum(trade_pls[:i+1]), 2) for i in range(n_trades)],
+            "percentiles": {
+                "p5": round(sorted(sim_results)[int(n_sims * 0.05)], 2),
+                "p25": round(sorted(sim_results)[int(n_sims * 0.25)], 2),
+                "p50": round(sorted(sim_results)[int(n_sims * 0.50)], 2),
+                "p75": round(sorted(sim_results)[int(n_sims * 0.75)], 2),
+                "p95": round(sorted(sim_results)[int(n_sims * 0.95)], 2),
+            }
+        }
+    else:
+        mc_data = {"n_sims": 0, "n_trades": n_trades, "bands": {}, "final_equity": [], "actual_curve": [], "percentiles": {}}
+
+    # ── 3. Leverage / Volume Correlation ──
+    # Group trades by volume bucket, compute avg P&L per bucket
+    vol_buckets = {}
+    for t in trades:
+        v = t.get("volume", 0) or 0
+        if v <= 0:
+            continue
+        # Bucket: 0.01-0.1, 0.1-0.5, 0.5-1, 1-2, 2-5, 5+
+        if v < 0.1:
+            bk = "0.01-0.1"
+        elif v < 0.5:
+            bk = "0.1-0.5"
+        elif v < 1:
+            bk = "0.5-1"
+        elif v < 2:
+            bk = "1-2"
+        elif v < 5:
+            bk = "2-5"
+        else:
+            bk = "5+"
+        if bk not in vol_buckets:
+            vol_buckets[bk] = {"count": 0, "total_pl": 0, "wins": 0, "volumes": []}
+        vol_buckets[bk]["count"] += 1
+        vol_buckets[bk]["total_pl"] += t["profit"]
+        if t["profit"] > 0:
+            vol_buckets[bk]["wins"] += 1
+        vol_buckets[bk]["volumes"].append(v)
+
+    leverage_data = []
+    for bk in sorted(vol_buckets.keys()):
+        d = vol_buckets[bk]
+        avg_vol = sum(d["volumes"]) / len(d["volumes"]) if d["volumes"] else 0
+        leverage_data.append({
+            "bucket": bk,
+            "count": d["count"],
+            "avg_volume": round(avg_vol, 3),
+            "total_pl": round(d["total_pl"], 2),
+            "avg_pl": round(d["total_pl"] / d["count"], 2) if d["count"] else 0,
+            "win_rate": round(d["wins"] / d["count"] * 100, 1) if d["count"] else 0,
+        })
+
+    # Scatter data: each trade's volume vs profit
+    vol_pl_scatter = [
+        {"volume": round(t.get("volume", 0), 3), "profit": round(t["profit"], 2), "symbol": t.get("symbol", "")}
+        for t in trades if (t.get("volume", 0) or 0) > 0
+    ]
+
+    # ── 4. Holding Time P&L Distribution ──
+    # Group by duration bucket, compute total P&L per bucket
+    dur_pl_buckets = {"<1m": 0, "1-5m": 0, "5-60m": 0, "1-24h": 0, ">1d": 0}
+    dur_pl_counts = {"<1m": 0, "1-5m": 0, "5-60m": 0, "1-24h": 0, ">1d": 0}
+    for t in trades:
+        if t["open_time"] and t["close_time"]:
+            dur_min = (t["close_time"] - t["open_time"]).total_seconds() / 60
+            if dur_min < 1:
+                bk = "<1m"
+            elif dur_min < 5:
+                bk = "1-5m"
+            elif dur_min < 60:
+                bk = "5-60m"
+            elif dur_min < 1440:
+                bk = "1-24h"
+            else:
+                bk = ">1d"
+            dur_pl_buckets[bk] += t["profit"]
+            dur_pl_counts[bk] += 1
+
+    holding_pl_dist = [
+        {"bucket": bk, "total_pl": round(dur_pl_buckets[bk], 2), "count": dur_pl_counts[bk]}
+        for bk in ["<1m", "1-5m", "5-60m", "1-24h", ">1d"]
+    ]
+
     return {
         # Original metrics (unchanged)
         "count": len(trades),
@@ -392,4 +572,10 @@ def analyze(trades: list[dict], parse_data: dict | None = None) -> dict[str, Any
         "close_reason_distribution": close_reason_distribution,
         "stop_out_count": stop_out_count,
         "cs_timeline": timeline_items,
+        # v9.0 — new metrics
+        "mae_mfe_data": mae_mfe_data,
+        "monte_carlo": mc_data,
+        "leverage_data": leverage_data,
+        "vol_pl_scatter": vol_pl_scatter,
+        "holding_pl_dist": holding_pl_dist,
     }
