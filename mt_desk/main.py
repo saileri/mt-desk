@@ -266,8 +266,15 @@ def build_dashboard_html(account, trades, stats, cash_flows=None):
     sym_bubble_json = _j(sym_bubble)
 
     # All trades as JSON (with derived fields)
+    # Filter out open/pending trades (close_time == open_time or close_price == 0)
     all_trades = []
+    skipped_open = 0
     for t in trades:
+        # Skip open/pending: no close_time or close_time equals open_time or close_price is 0
+        if (not t.get("close_time") or t["close_time"] == t.get("open_time")
+                or not t.get("close_price")):
+            skipped_open += 1
+            continue
         dur_h = None
         if t["open_time"] and t["close_time"]:
             dur_h = round((t["close_time"] - t["open_time"]).total_seconds() / 3600, 2)
@@ -291,6 +298,8 @@ def build_dashboard_html(account, trades, stats, cash_flows=None):
             "duration_h": dur_h,
             "duration_str": _fmt_hours(dur_h) if dur_h is not None else "-",
             "profit_per_lot": profit_per_lot,
+            "comment": t.get("comment", ""),
+            "duration_s": round((t["close_time"] - t["open_time"]).total_seconds(), 2) if t["close_time"] and t["open_time"] else 0,
         })
     trade_json = json.dumps(all_trades, ensure_ascii=False)
 
@@ -1212,7 +1221,7 @@ function updateKPIs(){
   var vals=[total,'$'+(pl>=0?'+':'')+pl.toFixed(2),(total?(wins/total*100).toFixed(0):0)+'%',
     '+$'+avgW.toFixed(2),'-$'+avgL.toFixed(2),plr.toFixed(2),pf.toFixed(2),
     '$'+maxdd.toFixed(2),(sharpe||0).toFixed(2),'$'+(best!==-Infinity?'+':'')+best.toFixed(2),'$-'+Math.abs(worst).toFixed(2)];
-  var kpiVals=document.querySelectorAll('.kpi .val');
+  var kpiVals=document.querySelectorAll('.kpi-core .val');
   for(var i=0;i<Math.min(vals.length,kpiVals.length);i++){kpiVals[i].textContent=vals[i];}
   updateSummaryLine(total,wins,pl);renderInsights();
 }
@@ -1256,7 +1265,31 @@ function updateChartsFromFilter(){
   SESSION_RADAR=sesKey.map(function(k,i){var v=session[k]||{cnt:0,pl:0,wins:0};return{name:sesNames[i],cnt:v.cnt,pl:Math.round(v.pl*100)/100,wr:v.cnt?Math.round(v.wins/v.cnt*1000)/10:0};});
   // Update symbol bubble
   SYM_BUBBLE=[];Object.keys(symPl).forEach(function(s){SYM_BUBBLE.push({name:s,count:symCount[s]||0,pl:Math.round(symPl[s]*100)/100,wr:symCount[s]?Math.round((symPl[s]>0?1:0)/symCount[s]*1000)/10:0});});
-  initAllCharts();
+  // ── Recalculate CS Audit data from filtered trades ──
+  var csCloseReason={};var csHoldTime={};var csSwapBurden={};
+  data.forEach(function(t){
+    // Close reason
+    var comment=(t.comment||'').toLowerCase();
+    var dur_s=t.duration_s||0;
+    if(comment.indexOf('so')>=0||comment.indexOf('stop out')>=0||comment.indexOf('爆仓')>=0)csCloseReason['Stop Out (爆仓)']=(csCloseReason['Stop Out (爆仓)']||0)+1;
+    else if(comment.indexOf('sl')>=0)csCloseReason['SL (止损)']=(csCloseReason['SL (止损)']||0)+1;
+    else if(comment.indexOf('tp')>=0)csCloseReason['TP (止盈)']=(csCloseReason['TP (止盈)']||0)+1;
+    else csCloseReason['Manual (手动/其他)']=(csCloseReason['Manual (手动/其他)']||0)+1;
+    // Holding time buckets
+    if(dur_s<10)csHoldTime['< 10s']=(csHoldTime['< 10s']||0)+1;
+    else if(dur_s<60)csHoldTime['10s-1m']=(csHoldTime['10s-1m']||0)+1;
+    else if(dur_s<300)csHoldTime['1m-5m']=(csHoldTime['1m-5m']||0)+1;
+    else if(dur_s<3600)csHoldTime['5m-1h']=(csHoldTime['5m-1h']||0)+1;
+    else if(dur_s<86400)csHoldTime['1h-24h']=(csHoldTime['1h-24h']||0)+1;
+    else csHoldTime['> 24h']=(csHoldTime['> 24h']||0)+1;
+    // Swap burden by symbol
+    var sym=t.symbol||'unknown';
+    if(!csSwapBurden[sym])csSwapBurden[sym]={name:sym,profit:0,swap:0,commission:0};
+    csSwapBurden[sym].profit+=t.profit||0;csSwapBurden[sym].swap+=t.swap||0;csSwapBurden[sym].commission+=t.commission||0;
+  });
+  CS_CLOSE_REASON=csCloseReason;CS_HOLDING_TIME=csHoldTime;
+  CS_SWAP_BURDEN=Object.keys(csSwapBurden).map(function(s){return csSwapBurden[s];});
+  initAllCharts();initCSCharts();
 }
 function updateSummaryLine(total,wins,pl){
   var sl=document.getElementById('summaryLine');if(!sl)return;
