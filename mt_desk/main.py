@@ -83,6 +83,31 @@ def build_dashboard_html(account, trades, stats, cash_flows=None):
     top_pct = top_sym[1] / max(stats["count"], 1) * 100 if top_sym else 0
     single_sym = top_pct > 90
 
+    # ── Session P&L breakdown (replaces pie for single-symbol accounts) ──
+    session_pnl = {"asia": 0, "london": 0, "ny": 0}
+    session_counts = {"asia": 0, "london": 0, "ny": 0}
+    for t in trades:
+        ot = t.get("open_time")
+        if not ot:
+            continue
+        h = ot.hour
+        pl = t.get("profit", 0)
+        if 0 <= h < 8:
+            session_pnl["asia"] += pl
+            session_counts["asia"] += 1
+        elif 8 <= h < 14:
+            session_pnl["london"] += pl
+            session_counts["london"] += 1
+        else:
+            session_pnl["ny"] += pl
+            session_counts["ny"] += 1
+    session_data = [
+        {"name": "亞洲盤", "pl": round(session_pnl["asia"], 2), "count": session_counts["asia"]},
+        {"name": "倫敦盤", "pl": round(session_pnl["london"], 2), "count": session_counts["london"]},
+        {"name": "紐約盤", "pl": round(session_pnl["ny"], 2), "count": session_counts["ny"]},
+    ]
+    session_json = json.dumps(session_data, ensure_ascii=False)
+
     # Determine date span for smart chart aggregation
     open_dates = sorted(set(t["open_time"].strftime("%Y-%m-%d") for t in trades if t.get("open_time")))
     date_span_days = 0
@@ -110,6 +135,10 @@ def build_dashboard_html(account, trades, stats, cash_flows=None):
   <div class="summary-card" id="symbolPieBox">
     <div class="summary-title">品種偏好</div>
     <div id="chart-symbol-pie" style="width:100%;height:280px"></div>
+    <div id="sessionPnlBox" style="display:none;padding:12px 0">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text)">⚡ 交易時段盈虧分佈</div>
+      <div id="sessionPnlList"></div>
+    </div>
     <div id="symbolPieText" style="display:none;text-align:center;padding:20px;font-size:14px;color:var(--muted);line-height:1.6"></div>
   </div>
   <div class="summary-card">
@@ -273,9 +302,51 @@ def build_dashboard_html(account, trades, stats, cash_flows=None):
     html = _HTML.replace("{ACCOUNT}", account).replace("{COUNT}", str(stats["count"]))
     html = html.replace("{PL}", f"${stats['total_pl']:+,.2f}").replace("{PL_COLOR}", pl_color)
     html = html.replace("{WR}", f"{stats['wr']:.0f}%").replace("{CORE_CARDS}", core_html).replace("{SEC_CARDS}", sec_html)
+
+    # ── Risk Banner: auto-detect risk warnings ──
+    risk_tags = []
+    risk_msgs = []
+    if stats["wr"] < 30:
+        risk_tags.append(f"勝率 {stats['wr']:.0f}%")
+    # Count trades with duration < 10 seconds
+    scalp_count = sum(1 for t in trades if t.get("duration_h", 0) and t["duration_h"] < 10/3600)
+    scalp_pct = scalp_count / max(stats["count"], 1) * 100
+    if scalp_pct > 20:
+        risk_tags.append(f"持倉 < 10秒 {scalp_pct:.0f}%")
+    # Count trades with no SL
+    no_sl = sum(1 for t in trades if not t.get("sl"))
+    no_sl_pct = no_sl / max(stats["count"], 1) * 100
+    if no_sl_pct > 80:
+        risk_tags.append(f"SL未設置 {no_sl_pct:.0f}%")
+    # Swap burden
+    total_swap_abs = abs(stats.get("total_swap", 0))
+    total_pl_abs = abs(stats.get("total_pl", 1))
+    if total_pl_abs > 0 and total_swap_abs / total_pl_abs > 0.03:
+        risk_tags.append(f"Swap佔比 {total_swap_abs/total_pl_abs*100:.1f}%")
+
+    if risk_tags:
+        banner_level = "warn"
+        banner_icon = "⚠️"
+        banner_text = f"檢測到 {stats['count']} 筆交易存在以下風險特徵："
+        tags_html = '<div class="rb-tags">' + "".join(f'<span class="rb-tag">{t}</span>' for t in risk_tags) + '</div>'
+        banner_html = f'<span class="rb-icon">{banner_icon}</span><div><strong>交易健康度預警：</strong> {banner_text}{tags_html}</div>'
+    elif stats["total_pl"] > 0 and stats["wr"] >= 50:
+        banner_level = "good"
+        banner_icon = "✅"
+        banner_html = f'<span class="rb-icon">{banner_icon}</span><div><strong>交易健康度良好：</strong>獲利 {stats["wr"]:.0f}% 勝率，淨盈利 ${stats["total_pl"]:+,.2f}</div>'
+    else:
+        banner_level = "info"
+        banner_icon = "ℹ️"
+        banner_html = f'<span class="rb-icon">{banner_icon}</span><div><strong>交易概覽：</strong>{stats["count"]} 筆交易，淨盈虧 ${stats["total_pl"]:+,.2f}，勝率 {stats["wr"]:.0f}%</div>'
+    html = html.replace("{RISK_BANNER_LEVEL}", banner_level)
+    html = html.replace("{RISK_BANNER_HTML}", banner_html)
+
+    # Theme icon
+    html = html.replace("{THEME_ICON}", "🌙")
     html = html.replace("{SUMMARY}", summary_html).replace("{TRADE_JSON}", trade_json)
     html = html.replace("{ECHART_CDN}", ECHARTS_CDN).replace("{SYM_PIE_DATA}", sym_pie_json)
     html = html.replace("{SYM_PL_JSON}", sym_pl_json)
+    html = html.replace("{SESSION_PNL_JSON}", session_json)
     html = html.replace("{VOL_JSON}", vol_json).replace("{SWAP_JSON}", sw_json)
     html = html.replace("{DATE_MIN}", date_min).replace("{DATE_MAX}", date_max)
 
@@ -408,13 +479,13 @@ def build_dashboard_html(account, trades, stats, cash_flows=None):
 _HTML = r"""<!DOCTYPE html><html lang="zh-HK"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MT Desk — {ACCOUNT}</title>
 <style>
-:root,[data-theme="dark"]{--bg:#0b0d14;--surface:#141824;--card:#1a1f2c;--border:#2a3142;--text:#e8ecf4;--muted:#7b879c;--blue:#3b82f6;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--purple:#8b5cf6;--radius:10px}
-[data-theme="light"]{--bg:#f4f6f9;--surface:#ffffff;--card:#ffffff;--border:#e2e8f0;--text:#1e293b;--muted:#64748b;--blue:#2563eb;--green:#16a34a;--red:#dc2626;--yellow:#d97706;--purple:#7c3aed}
+:root,[data-theme="dark"]{--bg:#0b0e14;--surface:#151a23;--card:#1c2331;--border:#2e374a;--text:#e6edf3;--muted:#8b949e;--blue:#3b82f6;--green:#10b981;--red:#f43f5e;--yellow:#f59e0b;--purple:#8b5cf6;--radius:12px}
+[data-theme="light"]{--bg:#f4f6f9;--surface:#ffffff;--card:#ffffff;--border:#e2e8f0;--text:#1e293b;--muted:#64748b;--blue:#2563eb;--green:#16a34a;--red:#e11d48;--yellow:#d97706;--purple:#7c3aed}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Helvetica Neue',sans-serif;background:var(--bg);color:var(--text);font-size:clamp(12px,1vw,15px);line-height:1.55;-webkit-font-smoothing:antialiased}
-.header{background:var(--surface);border-bottom:1px solid var(--border);padding:clamp(10px,1vw,18px) clamp(14px,1.4vw,28px);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
-.header h1{font-size:clamp(16px,1.4vw,22px);font-weight:700;color:var(--text);letter-spacing:-.3px}
-.header h1 span{font-size:clamp(11px,1vw,14px);font-weight:500;color:var(--muted);margin-left:8px}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:clamp(12px,1vw,20px) clamp(14px,1.4vw,28px);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.header h1{font-size:clamp(17px,1.5vw,23px);font-weight:800;color:var(--text);letter-spacing:-.5px;display:flex;align-items:center;gap:10px}
+.header h1 span{font-size:clamp(11px,1vw,14px);font-weight:500;color:var(--muted);margin-left:4px}
 .header .meta{font-size:clamp(10px,0.8vw,13px);color:var(--muted)}.header .meta b{color:var(--text)}
 .theme-btn{background:var(--card);border:1px solid var(--border);color:var(--muted);padding:5px 11px;border-radius:7px;cursor:pointer;font-size:clamp(10px,0.8vw,13px);font-family:inherit}.theme-btn:hover{border-color:var(--blue);color:var(--text)}
 .date-bar{display:flex;align-items:center;gap:8px;padding:8px clamp(14px,1.4vw,28px);background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap}
@@ -423,7 +494,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 .date-bar .lbl{font-size:clamp(9px,0.7vw,11px);color:var(--muted)}
 .main{max-width:1500px;margin:0 auto;padding:clamp(10px,1vw,20px)}
 .kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(115px,11vw,150px),1fr));gap:clamp(6px,0.6vw,10px);margin-bottom:clamp(12px,1.1vw,18px)}
-.kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:clamp(10px,0.9vw,14px);text-align:center;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:clamp(12px,0.9vw,16px);text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.1);transition:border-color .2s,box-shadow .2s}
+.kpi:hover{border-color:rgba(59,130,246,0.3);box-shadow:0 4px 16px rgba(0,0,0,.15)}
 .kpi .lbl{display:block;font-size:clamp(9px,0.7vw,11px);color:var(--muted);margin-bottom:5px}
 .kpi .val{display:block;font-size:clamp(16px,1.4vw,22px);font-weight:800;letter-spacing:-.5px}
 .kpi.has-tip{position:relative;cursor:help}
@@ -445,9 +517,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Micr
 .insight-list li::before{content:'→';position:absolute;left:0;color:var(--blue);font-weight:700}
 .section-title{font-size:clamp(15px,1.2vw,19px);font-weight:700;color:var(--text);margin:24px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
 .chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(10px,1vw,14px);margin-bottom:16px}
-.chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:12px 14px 6px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
-.chart-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.chart-title{font-size:clamp(12px,0.95vw,14px);font-weight:700;color:var(--text)}
+.chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:14px 16px 8px;box-shadow:0 2px 8px rgba(0,0,0,.1);transition:border-color .2s,box-shadow .2s}
+.chart-box:hover{border-color:rgba(59,130,246,0.2);box-shadow:0 4px 16px rgba(0,0,0,.15)}
+.chart-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.chart-title{font-size:clamp(13px,1vw,15px);font-weight:700;color:var(--text);display:flex;align-items:center;gap:6px}
 .chart-sub{font-size:10px;color:var(--muted);font-weight:400}
 #chart-symbol-pie{cursor:pointer}
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
@@ -519,16 +592,24 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
 .mc-stat{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 14px;text-align:center;min-width:100px}
 .mc-stat .mc-label{font-size:10px;color:var(--muted);display:block}
 .mc-stat .mc-val{font-size:16px;font-weight:700;color:var(--text)}
+/* ═══ Risk Banner ═══ */
+.risk-banner{border-radius:var(--radius);padding:12px 18px;margin:0 clamp(14px,1.4vw,28px) 16px;display:flex;align-items:center;gap:12px;font-size:13px;line-height:1.6;animation:tabFadeIn .4s ease}
+.risk-banner.warn{background:rgba(244,63,94,0.1);border:1px solid rgba(244,63,94,0.3);color:#fda4af}
+.risk-banner.info{background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);color:var(--blue)}
+.risk-banner.good{background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);color:var(--green)}
+.risk-banner .rb-icon{font-size:22px;flex-shrink:0}
+.risk-banner .rb-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.risk-banner .rb-tag{background:rgba(244,63,94,0.15);border:1px solid rgba(244,63,94,0.2);padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
 /* ═══ Holding P&L Bar ═══ */
 .holding-pl-bar{display:flex;gap:6px;align-items:flex-end;height:120px;margin-top:8px}
 .holding-pl-seg{flex:1;border-radius:4px 4px 0 0;position:relative;min-height:4px;transition:all .3s}
 .holding-pl-seg:hover{opacity:.85}
 .holding-pl-label{position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:9px;color:var(--muted);white-space:nowrap}
 </style></head><body>
-<div class="header"><h1>MT Desk v9.0 <span>交易習慣分析報表</span></h1>
+<div class="header"><h1>🛡️ MT Risk Standard <span>— Account #{ACCOUNT}</span></h1>
 <div style="display:flex;align-items:center;gap:12px">
   <div class="meta"><span id="headerCount">{COUNT}</span> 筆交易 · P/L: <b id="headerPL" style="color:{PL_COLOR}">{PL}</b> · 獲利佔比: <b id="headerWR">{WR}</b></div>
-  <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌓</button>
+  <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">{THEME_ICON}</button>
   <button class="theme-btn" onclick="window.print()" title="列印報告">🖨️</button>
 </div></div>
 <div class="date-bar">
@@ -545,6 +626,8 @@ tr.highlight td{outline:2px solid #f59e0b;outline-offset:-1px}
   <button onclick="resetDateFilter()">重置</button>
   <span class="lbl" id="filterInfo"></span>
 </div>
+<!-- ═══ Risk Banner ═══ -->
+<div id="riskBanner" class="risk-banner {RISK_BANNER_LEVEL}">{RISK_BANNER_HTML}</div>
 <!-- ═══ Tab Navigation ═══ -->
 <div class="tab-nav" id="tabNav">
   <button class="tab-btn active" onclick="switchTab('dashboard')"><span class="tab-icon">📊</span>Dashboard 總覽</button>
@@ -750,10 +833,11 @@ var MONTE_CARLO={MONTE_CARLO_JSON};
 var LEVERAGE_DATA={LEVERAGE_JSON};
 var VOL_PL_SCATTER={VOL_PL_SCATTER_JSON};
 var HOLDING_PL_DIST={HOLDING_PL_DIST_JSON};
+var SESSION_PNL_DATA={SESSION_PNL_JSON};
 
-(function(){var s=localStorage.getItem('mt-theme');var m=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',s||m);})();
+(function(){var s=localStorage.getItem('mt-theme');var m=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';var th=s||m;document.documentElement.setAttribute('data-theme',th);var btn=document.getElementById('themeBtn');if(btn)btn.textContent=th==='dark'?'🌙':'☀️';})();
 window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(e){if(!localStorage.getItem('mt-theme')){document.documentElement.setAttribute('data-theme',e.matches?'dark':'light');initAllCharts();}});
-function toggleTheme(){var c=document.documentElement.getAttribute('data-theme');var n=c==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('mt-theme',n);initAllCharts();initNewCharts();initMAECharts();}
+function toggleTheme(){var c=document.documentElement.getAttribute('data-theme');var n=c==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('mt-theme',n);var btn=document.getElementById('themeBtn');if(btn)btn.textContent=n==='dark'?'🌙':'☀️';initAllCharts();initNewCharts();initMAECharts();}
 
 // ═══ Tab Switching ═══
 function switchTab(tabId){
@@ -1032,7 +1116,7 @@ window.addEventListener('resize',function(){
   });
 });
 initAllCharts();renderInsights();renderQuickInsights();initNewCharts();
-// Single-symbol pie check
+// Single-symbol pie check → show session P&L breakdown instead
 (function(){
   var total=SYM_PIE_DATA.reduce(function(a,b){return a+b.value;},0);
   var top=SYM_PIE_DATA[0];
@@ -1040,6 +1124,22 @@ initAllCharts();renderInsights();renderQuickInsights();initNewCharts();
     document.getElementById('chart-symbol-pie').style.display='none';
     document.getElementById('symbolPieText').style.display='block';
     document.getElementById('symbolPieText').innerHTML='主打品種：<b style="color:var(--blue);font-size:18px">'+top.name+'</b><br>佔比：<b>'+Math.round(top.value/total*100)+'%</b>（'+top.value+' 筆）';
+    // Show session P&L breakdown
+    var sb=document.getElementById('sessionPnlBox');
+    if(sb&&SESSION_PNL_DATA){
+      sb.style.display='block';
+      var cl=document.getElementById('sessionPnlList');
+      var h='';
+      SESSION_PNL_DATA.forEach(function(s){
+        var c=s.pl>=0?'var(--green)':'var(--red)';
+        var sign=s.pl>=0?'+':'';
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">'+
+          '<div><span style="font-weight:600">'+s.name+'</span> <span style="font-size:11px;color:var(--muted)">('+s.count+' 筆)</span></div>'+
+          '<div style="font-family:monospace;font-weight:700;font-size:15px;color:'+c+'">'+sign+'$'+s.pl.toFixed(2)+'</div>'+
+          '</div>';
+      });
+      cl.innerHTML=h;
+    }
   }
 })();
 // Duration insight: if >90% in <1h, show text instead of chart
