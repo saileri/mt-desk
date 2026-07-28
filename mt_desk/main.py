@@ -16,20 +16,20 @@ def _j(obj): return json.dumps(obj, ensure_ascii=False, default=str)
 
 def build_dashboard_html(account,trades,stats):
     avg_w=stats["avg_win"];avg_l=abs(stats["avg_loss"]);plr=avg_w/avg_l if avg_l>0 else 0
-    wr_val=stats["wr"];wr_c="--green" if wr_val>=50 else"--muted" if wr_val>=30 else"--red"
-    pf_val=stats["pf"];pf_c="--red" if pf_val<1 else"--muted" if pf_val<2 else"--green"
+    wr_val=stats["wr"];wr_c="--pve-green" if wr_val>=50 else"--pve-muted" if wr_val>=30 else"--pve-red"
+    pf_val=stats["pf"];pf_c="--pve-red" if pf_val<1 else"--pve-muted" if pf_val<2 else"--pve-green"
     cards=[
         ("總交易",str(stats["count"]),"總交易筆數",""),
-        ("總盈虧",f"${stats['total_pl']:+,.2f}","所有交易的淨盈虧金額總和","--green" if stats["total_pl"]>=0 else"--red"),
+        ("總盈虧",f"${stats['total_pl']:+,.2f}","所有交易的淨盈虧金額總和","--pve-green" if stats["total_pl"]>=0 else"--pve-red"),
         ("獲利佔比",f"{wr_val:.0f}%","盈利交易數 ÷ 總交易數 × 100%",wr_c),
-        ("平均盈利",f"+${avg_w:,.2f}","盈利交易的平均獲利金額","--green"),
-        ("平均虧損",f"-${avg_l:,.2f}","虧損交易的平均損失金額","--red"),
-        ("盈虧比",f"{plr:.2f}","平均盈利 ÷ 平均虧損，<1 表示每賺 1 元要賠更多元，即使獲利佔比高也會虧損","--muted" if plr<1 else"--green"),
+        ("平均盈利",f"+${avg_w:,.2f}","盈利交易的平均獲利金額","--pve-green"),
+        ("平均虧損",f"-${avg_l:,.2f}","虧損交易的平均損失金額","--pve-red"),
+        ("盈虧比",f"{plr:.2f}","平均盈利 ÷ 平均虧損，<1 表示每賺 1 元要賠更多元，即使獲利佔比高也會虧損","--pve-muted" if plr<1 else"--pve-green"),
         ("盈利因子",f"{pf_val:.2f}" if pf_val!=float("inf") else"∞","總盈利 ÷ 總虧損絕對值，<1 代表虧損策略",pf_c),
-        ("最大回撤",f"${stats['max_dd']:,.2f}","權益曲線從最高點到最低點的最大跌幅","--red"),
-        ("夏普比率",f"{stats['sharpe']:.2f}","風險調整後報酬，<0 表示平均每日回報為負","--muted"),
-        ("最佳",f"+${stats['best']:,.2f}","單筆最大盈利","--green"),
-        ("最差",f"-${abs(stats['worst']):,.2f}","單筆最大虧損","--red"),
+        ("最大回撤",f"${stats['max_dd']:,.2f}","權益曲線從最高點到最低點的最大跌幅","--pve-red"),
+        ("夏普比率",f"{stats['sharpe']:.2f}","風險調整後報酬，<0 表示平均每日回報為負","--pve-muted"),
+        ("最佳",f"+${stats['best']:,.2f}","單筆最大盈利","--pve-green"),
+        ("最差",f"-${abs(stats['worst']):,.2f}","單筆最大虧損","--pve-red"),
     ]
     r_kpi_html=""
     card_html="".join(f'<div class="kpi has-tip"><span class="lbl">{l}</span><span class="val" style="color:var({c})">{v}</span><span class="tip">{tip}</span></div>' for l,v,tip,c in cards)+r_kpi_html
@@ -50,12 +50,12 @@ def build_dashboard_html(account,trades,stats):
     # Single-symbol banner
     single_sym_name=sym_keys[0].upper() if is_single_sym and sym_n==1 else ""
     single_sym_banner=f'''
-  <div class="summary-card" style="grid-column:span 3;display:flex;align-items:center;justify-content:center;min-height:100px">
+  <div class="summary-card" style="grid-column:span 2;display:flex;align-items:center;justify-content:center;min-height:80px">
     <div style="text-align:center">
-      <span style="font-size:32px;margin-right:10px">🔥</span>
-      <span style="font-size:15px;color:var(--muted)">當前周期內專注交易單一品種：</span>
-      <span style="font-size:20px;font-weight:700;color:var(--blue)">{single_sym_name}</span>
-      <div style="margin-top:6px;font-size:12px;color:var(--muted)">
+      <span style="font-size:24px;margin-right:8px">🔥</span>
+      <span style="font-size:13px;color:var(--pve-muted)">當前周期內專注交易單一品種：</span>
+      <span style="font-size:18px;font-weight:700;color:var(--pve-orange)">{single_sym_name}</span>
+      <div style="margin-top:4px;font-size:11px;color:var(--pve-muted)">
         {stats["sym_count"][sym_keys[0]]} 筆交易 · {stats["sym_volume"].get(sym_keys[0],0):.2f} 手 · P/L ${stats["sym_pl"].get(sym_keys[0],0):+,.2f}
       </div>
     </div>
@@ -65,16 +65,16 @@ def build_dashboard_html(account,trades,stats):
   <div id="symBarCard" class="summary-card" style="grid-column:span 2;{'display:none' if is_single_sym else ''}">
     <div class="summary-title" style="display:flex;align-items:center;gap:8px">
       <span>品種偏好</span>
-      <span style="font-size:10px;color:var(--muted);font-weight:400"> 💡 點擊品種可篩選明細</span>
+      <span style="font-size:10px;color:var(--pve-muted);font-weight:400">💡 點擊品種可篩選明細</span>
       <span style="flex:1"></span>
-      <span id="symToggleBtn" class="quick-btn active" style="font-size:10px;padding:2px 8px;cursor:pointer" onclick="toggleSymView()">📊 按次數</span>
+      <span id="symToggleBtn" class="quick-btn active" style="font-size:9px;padding:1px 6px;cursor:pointer" onclick="toggleSymView()">📊 按次數</span>
     </div>
-    <div id="chart-symbol-bar" style="width:100%;height:260px"></div>
+    <div id="chart-symbol-bar" style="width:100%;height:220px"></div>
   </div>
   {single_sym_banner}
   <div class="summary-card">
-    <div class="summary-title">Swap / 利息 <span style="font-size:10px;color:var(--muted);font-weight:400">${total_swap_val:+,.2f}</span></div>
-    <div id="chart-swap-bar" style="width:100%;height:200px"></div>
+    <div class="summary-title">Swap / 利息 <span style="font-size:10px;color:var(--pve-muted);font-weight:400">${total_swap_val:+,.2f}</span></div>
+    <div id="chart-swap-bar" style="width:100%;height:160px"></div>
   </div>
 </div>'''
     # ── v6.1: Long-term habit analysis charts ──
@@ -120,7 +120,7 @@ def build_dashboard_html(account,trades,stats):
             else: r_buckets["5+R"]+=1
         rlb=list(r_buckets.keys());rva=list(r_buckets.values())
         r_chart_json=_j({"labels":rlb,"data":rva,"avg":stats.get("avg_r",0)})
-        r_kpi_html=f'<div class="kpi has-tip"><span class="lbl">平均 R-Multiple</span><span class="val" style="color:var(--{"green" if stats["avg_r"]>=0 else "red"})">{stats["avg_r"]:+.2f}R</span><span class="tip">價位移動距離 ÷ 初始止損距離。>0 表示盈利，<0 表示虧損</span></div>'
+        r_kpi_html=f'<div class="kpi has-tip"><span class="lbl">平均 R-Multiple</span><span class="val" style="color:var(--pve-{"green" if stats["avg_r"]>=0 else "red"})">{stats["avg_r"]:+.2f}R</span><span class="tip">價位移動距離 ÷ 初始止損距離。>0 表示盈利，<0 表示虧損</span></div>'
 
     asset_class_data=stats.get("asset_class_count",{})
     ac_json="null"
@@ -171,91 +171,194 @@ def build_dashboard_html(account,trades,stats):
 _HTML=r"""<!DOCTYPE html><html lang="zh-HK"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>MT Desk — {ACCOUNT}</title>
 <style>
-:root,[data-theme="dark"]{--bg:#0f1119;--surface:#1a1f2e;--card:#1e2433;--border:#2d3446;--text:#e2e8f0;--muted:#64748b;--blue:#448aff;--green:#00e676;--red:#ff5252;--radius:8px}
-[data-theme="light"]{--bg:#f0f2f5;--surface:#ffffff;--card:#ffffff;--border:#d1d5db;--text:#1f2937;--muted:#6b7280;--blue:#2563eb;--green:#059669;--red:#dc2626}
+/* ══════ Proxmox VE Dark Theme ══════ */
+:root{--pve-bg:#0f1420;--pve-panel:#191e2b;--pve-panel-hdr:#141824;--pve-panel-alt:#1e2538;--pve-border:#2b2f3a;--pve-border-light:#333849;--pve-text:#e2e8f0;--pve-muted:#7a7f8c;--pve-orange:#dd7b14;--pve-orange-hi:#f59e0b;--pve-blue:#3b82f6;--pve-blue-dim:#1d4ed8;--pve-green:#22c55e;--pve-red:#ef4444;--pve-amber:#f59e0b;--radius:6px;--font:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Helvetica Neue',sans-serif;--font-mono:'JetBrains Mono','SF Mono','Consolas','Courier New',monospace}
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Helvetica Neue',sans-serif;background:var(--bg);color:var(--text);font-size:clamp(12px,1vw,15px);line-height:1.5;-webkit-font-smoothing:antialiased}
-.header{background:var(--surface);border-bottom:1px solid var(--border);padding:clamp(10px,1vw,18px) clamp(14px,1.4vw,28px);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
-.header h1{font-size:clamp(15px,1.3vw,20px);font-weight:600;color:var(--blue)}
-.header .meta{font-size:clamp(10px,0.8vw,13px);color:var(--muted)}.header .meta b{color:var(--text)}
-.theme-btn{background:var(--surface);border:1px solid var(--border);color:var(--muted);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:clamp(10px,0.8vw,13px);font-family:inherit}.theme-btn:hover{border-color:var(--blue);color:var(--text)}
-.date-bar{display:flex;align-items:center;gap:8px;padding:8px clamp(14px,1.4vw,28px);background:var(--surface);border-bottom:1px solid var(--border)}
-.date-bar input{padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:clamp(10px,0.8vw,12px);background:var(--bg);color:var(--text);font-family:inherit}
-.date-bar button{padding:4px 12px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--text);cursor:pointer;font-size:clamp(10px,0.8vw,12px);font-family:inherit}.date-bar button:hover{border-color:var(--blue)}
-.date-bar .lbl{font-size:clamp(9px,0.7vw,11px);color:var(--muted)}
-.main{max-width:1440px;margin:0 auto;padding:clamp(10px,1vw,20px)}
-.kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(110px,12vw,140px),1fr));gap:clamp(5px,0.5vw,8px);margin-bottom:clamp(10px,1vw,16px)}
-.kpi{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:clamp(10px,0.9vw,14px);text-align:center}
-.kpi .lbl{display:block;font-size:clamp(9px,0.7vw,11px);color:var(--muted);margin-bottom:4px}
-.kpi .val{display:block;font-size:clamp(15px,1.3vw,20px);font-weight:700}
-.kpi.has-tip{position:relative;cursor:help}
-.kpi .tip{display:none;position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;line-height:1.4;white-space:normal;max-width:220px;text-align:left;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.15);pointer-events:none}
-.kpi.has-tip .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--border)}
+body{font-family:var(--font);background:var(--pve-bg);color:var(--pve-text);font-size:clamp(12px,0.9vw,14px);line-height:1.5;-webkit-font-smoothing:antialiased;overflow:hidden;height:100vh;display:flex;flex-direction:column}
+
+/* ── Header (PVE-style) ── */
+.pve-hdr{background:linear-gradient(180deg,#1a1f30,#141824);border-bottom:1px solid var(--pve-border);display:flex;align-items:center;height:42px;flex-shrink:0;padding:0 8px}
+.pve-hdr-logo{display:flex;align-items:center;gap:6px;padding:0 10px;height:100%;border-right:1px solid var(--pve-border);min-width:180px}
+.pve-hdr-logo .icon{color:var(--pve-orange);font-size:18px}
+.pve-hdr-logo .name{color:var(--pve-text);font-size:13px;font-weight:600;letter-spacing:0.3px}
+.pve-hdr-logo .ver{color:var(--pve-muted);font-size:10px;margin-left:4px}
+.pve-hdr-bread{display:flex;align-items:center;gap:6px;padding:0 12px;flex:1}
+.pve-hdr-bread span{font-size:11px;color:var(--pve-muted)}.pve-hdr-bread .sep{color:var(--pve-border-light)}
+.pve-hdr-bread .cur{color:var(--pve-orange);font-weight:500}
+.pve-hdr-right{display:flex;align-items:center;gap:10px;padding:0 10px}
+.pve-hdr-right .hdr-stat{font-size:10px;color:var(--pve-muted);display:flex;align-items:center;gap:4px}
+.pve-hdr-right .hdr-stat b{color:var(--pve-text)}
+.pve-hdr-right .hdr-stat .dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+.dot.on{background:var(--pve-green);box-shadow:0 0 6px rgba(34,197,94,0.4)}
+.dot.off{background:var(--pve-red);box-shadow:0 0 6px rgba(239,68,68,0.4)}
+.pve-btn{background:var(--pve-panel);border:1px solid var(--pve-border);color:var(--pve-muted);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-family:inherit}
+.pve-btn:hover{border-color:var(--pve-blue);color:var(--pve-text)}
+
+/* ── Body layout ── */
+.pve-body{display:flex;flex:1;overflow:hidden}
+
+/* ── Sidebar (PVE tree nav) ── */
+.pve-sidebar{width:200px;background:var(--pve-panel);border-right:1px solid var(--pve-border);flex-shrink:0;overflow-y:auto;padding:6px 0}
+.pve-sidebar::-webkit-scrollbar{width:4px}
+.pve-sidebar::-webkit-scrollbar-thumb{background:var(--pve-border);border-radius:2px}
+.pve-sect{list-style:none}
+.pve-sect li{display:flex;align-items:center;gap:8px;padding:7px 14px;font-size:12px;color:var(--pve-muted);cursor:pointer;transition:all .15s;border-left:3px solid transparent;user-select:none}
+.pve-sect li:hover{color:var(--pve-text);background:rgba(59,130,246,0.06)}
+.pve-sect li.active{color:var(--pve-orange);background:rgba(221,123,20,0.08);border-left-color:var(--pve-orange);font-weight:500}
+.pve-sect li .s-icon{font-size:14px;width:18px;text-align:center;flex-shrink:0}
+.pve-sect li .s-badge{font-size:9px;padding:0 5px;border-radius:3px;background:var(--pve-orange);color:#fff;margin-left:auto}
+.pve-sect-hdr{font-size:9px;text-transform:uppercase;letter-spacing:0.8px;color:var(--pve-muted);padding:10px 14px 4px;opacity:0.5}
+
+/* ── Main content ── */
+.pve-content{flex:1;overflow-y:auto;padding:12px 16px;min-width:0}
+.pve-content::-webkit-scrollbar{width:6px}
+.pve-content::-webkit-scrollbar-thumb{background:var(--pve-border);border-radius:3px}
+.pve-content::-webkit-scrollbar-track{background:transparent}
+
+/* ── Proxmox-style panels ── */
+.pve-panel{background:var(--pve-panel);border:1px solid var(--pve-border);border-radius:var(--radius);margin-bottom:12px}
+.pve-panel-hdr{background:var(--pve-panel-hdr);border-bottom:1px solid var(--pve-border);padding:7px 12px;font-size:12px;font-weight:600;color:var(--pve-text);display:flex;align-items:center;gap:6px}
+.pve-panel-hdr .pve-icon{font-size:13px;color:var(--pve-orange)}
+.pve-panel-hdr .pve-sub{font-size:10px;font-weight:400;color:var(--pve-muted);margin-left:6px}
+.pve-panel-body{padding:10px 12px}
+
+/* ── KPI Cards (PVE datacenter style) ── */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(100px,10vw,130px),1fr));gap:6px}
+.kpi{background:var(--pve-panel-alt);border:1px solid var(--pve-border);border-radius:var(--radius);padding:8px 10px;text-align:center;position:relative}
+.kpi .lbl{display:block;font-size:9px;color:var(--pve-muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:0.3px}
+.kpi .val{display:block;font-size:clamp(14px,1.2vw,18px);font-weight:700;font-family:var(--font-mono)}
+.kpi.has-tip{cursor:help}
+.kpi .tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--pve-panel-hdr);color:var(--pve-text);border:1px solid var(--pve-border);border-radius:4px;padding:5px 8px;font-size:10px;line-height:1.4;white-space:normal;max-width:200px;text-align:left;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.3);pointer-events:none}
+.kpi.has-tip .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:var(--pve-border)}
 .kpi.has-tip:hover .tip{display:block}
-.summary-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:16px}
-.summary-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;justify-content:center;min-height:120px}
-.summary-title{font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:500}
-.summary-val{font-size:28px;font-weight:700;color:var(--text)}
-.summary-sub{font-size:11px;color:var(--muted);margin-top:4px}
-.section-title{font-size:14px;font-weight:600;color:var(--text);margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
-.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(8px,0.8vw,12px);margin-bottom:16px}
-.chart-box{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;padding:10px 12px 4px}
-.chart-box .axis-hint{font-size:9px;color:var(--muted);text-align:right;margin-top:-6px;margin-bottom:2px;padding-right:4px}
-#chart-symbol-pie{cursor:pointer}
-.chart-title{font-size:13px;font-weight:600;color:var(--text);padding:2px 0 0 2px;display:flex;align-items:center;gap:6px}
-.chart-title-sub{font-size:10px;font-weight:400;color:var(--muted)}
-.chart-tag{display:inline-block;font-size:9px;padding:1px 6px;border-radius:3px;margin-right:4px;vertical-align:middle;font-weight:500}
-.chart-tag.x{background:var(--muted);color:var(--bg);opacity:.7}.chart-tag.y{background:var(--blue);color:#fff;opacity:.7}
-/* Badge styles for table */
-.badge-dir{display:inline-block;padding:1px 8px;border-radius:10px;font-size:10px;font-weight:600;letter-spacing:0.3px}
-.badge-buy{background:rgba(5,150,105,0.15);color:#34d399}
-.badge-sell{background:rgba(220,38,38,0.15);color:#f87171}
-td.num{text-align:right;font-family:'JetBrains Mono','SF Mono','Consolas',monospace;font-size:clamp(9px,0.7vw,12px)}
-td.fade{color:var(--muted);opacity:0.4}
-tr.zebra td{background:rgba(255,255,255,0.015)}
-tr:hover td{background:var(--surface)!important}
-.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
-.toolbar input{padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:clamp(10px,0.8vw,13px);outline:none;background:var(--surface);color:var(--text);font-family:inherit;transition:border-color .2s;width:clamp(140px,18vw,200px)}
-.toolbar input:focus{border-color:var(--blue)}.toolbar input::placeholder{color:var(--muted)}
-.toolbar button,.toolbar select{padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--muted);cursor:pointer;font-size:clamp(10px,0.8vw,13px);font-family:inherit}
-.toolbar button:hover{background:var(--card);border-color:var(--blue);color:var(--text)}
-.toolbar .nav-btn{min-width:30px;text-align:center}.toolbar .page-info{font-size:clamp(10px,0.8vw,13px);color:var(--muted);margin:0 3px}
-.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:clamp(10px,0.8vw,13px)}
-th{background:var(--surface);padding:clamp(6px,0.5vw,8px) clamp(8px,0.7vw,12px);text-align:left;font-weight:600;border-bottom:1px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap;color:var(--muted);font-size:clamp(9px,0.7vw,11px)}
-th:hover{color:var(--text)}th .sort-arrow{font-size:8px;margin-left:3px;color:var(--blue)}
-td{padding:clamp(4px,0.4vw,6px) clamp(8px,0.7vw,12px);border-bottom:1px solid var(--border);color:var(--text)}
-tr:hover td{background:var(--surface)}.win,.win td{color:var(--green)!important}.loss,.loss td{color:var(--red)!important}.win td{background:rgba(0,230,118,0.07)}.loss td{background:rgba(255,82,82,0.07)}
-tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
-.summary-line{font-size:clamp(11px,0.9vw,14px);color:var(--text);margin-bottom:clamp(10px,1vw,16px);padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);line-height:1.6}
-.summary-line b{color:var(--blue)}.summary-line .pos{color:var(--green)}.summary-line .neg{color:var(--red)}
-.quick-btn{padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:var(--card);color:var(--muted);cursor:pointer;font-size:clamp(9px,0.7vw,11px);font-family:inherit}.quick-btn:hover{border-color:var(--blue);color:var(--text)}.quick-btn.active{border-color:var(--blue);color:var(--blue);background:rgba(68,138,255,0.1)}
-@media(max-width:768px){.summary-row{grid-template-columns:1fr 1fr}.chart-grid{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(3,1fr)}}
-@media print{@page{margin:12mm}.header,.date-bar,.toolbar,.theme-btn,.metric-guide{display:none!important}.chart-box{break-inside:avoid;page-break-inside:avoid}.table-wrap{overflow-x:visible}body{font-size:10pt;background:#fff!important;color:#000!important}.kpi{border:1px solid #ccc!important;background:#fff!important;box-shadow:none}.kpi .val{font-size:14pt}.kpi .lbl,.kpi .tip{color:#666!important}.chart-grid{grid-template-columns:1fr}.section-title{color:#000!important;border-bottom:1px solid #999}.summary-line{background:#f5f5f5!important;border:1px solid #ccc}}
+.kpi.status-ok{border-left:3px solid var(--pve-green)}
+.kpi.status-warn{border-left:3px solid var(--pve-amber)}
+.kpi.status-err{border-left:3px solid var(--pve-red)}
+.kpi.status-info{border-left:3px solid var(--pve-blue)}
+
+/* ── Summary line ── */
+.summary-line{font-size:11px;color:var(--pve-text);margin-bottom:12px;padding:8px 12px;background:var(--pve-panel);border:1px solid var(--pve-border);border-radius:var(--radius);line-height:1.6}
+.summary-line b{color:var(--pve-blue)}.summary-line .pos{color:var(--pve-green)}.summary-line .neg{color:var(--pve-red)}
+
+/* ── Quick date bar ── */
+.date-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:12px}
+.date-bar .lbl{font-size:10px;color:var(--pve-muted)}
+.date-bar input{padding:3px 6px;border:1px solid var(--pve-border);border-radius:4px;font-size:11px;background:var(--pve-panel);color:var(--pve-text);font-family:inherit}
+.date-bar input:focus{border-color:var(--pve-blue);outline:none}
+.quick-btn{padding:2px 8px;border:1px solid var(--pve-border);border-radius:4px;background:var(--pve-panel-alt);color:var(--pve-muted);cursor:pointer;font-size:10px;font-family:inherit;transition:all .15s}
+.quick-btn:hover{border-color:var(--pve-blue);color:var(--pve-text)}
+.quick-btn.active{border-color:var(--pve-orange);color:var(--pve-orange);background:rgba(221,123,20,0.1)}
+
+/* ── Summary row (symbol bar + swap) ── */
+.summary-row{display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-bottom:12px}
+.summary-card{background:var(--pve-panel);border:1px solid var(--pve-border);border-radius:var(--radius);padding:10px 12px}
+.summary-title{font-size:11px;color:var(--pve-muted);margin-bottom:6px;font-weight:500;display:flex;align-items:center;gap:6px}
+
+/* ── Section titles (PVE style) ── */
+.section-title{font-size:12px;font-weight:600;color:var(--pve-text);padding:6px 0;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.section-title::before{content:'';display:inline-block;width:3px;height:14px;background:var(--pve-orange);border-radius:2px;flex-shrink:0}
+
+/* ── Chart grid ── */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.chart-box{background:var(--pve-panel);border:1px solid var(--pve-border);border-radius:var(--radius);overflow:hidden;padding:8px 10px 2px}
+.chart-title{font-size:12px;font-weight:600;color:var(--pve-text);padding:2px 0 0 2px;display:flex;align-items:center;gap:6px}
+.chart-title-sub{font-size:10px;font-weight:400;color:var(--pve-muted)}
+.chart-tag{display:inline-block;font-size:8px;padding:1px 5px;border-radius:2px;margin-right:3px;vertical-align:middle;font-weight:500}
+.chart-tag.x{background:var(--pve-muted);color:var(--pve-panel)}.chart-tag.y{background:var(--pve-blue);color:#fff}
+
+/* ── Badge styles ── */
+.badge-dir{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:600;letter-spacing:0.2px}
+.badge-buy{background:rgba(34,197,94,0.15);color:var(--pve-green)}
+.badge-sell{background:rgba(239,68,68,0.15);color:var(--pve-red)}
+td.num{text-align:right;font-family:var(--font-mono);font-size:clamp(9px,0.7vw,11px)}
+td.fade{color:var(--pve-muted);opacity:0.4}
+
+/* ── Table (PVE datacenter style) ── */
+.toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px}
+.toolbar input{padding:4px 8px;border:1px solid var(--pve-border);border-radius:4px;font-size:11px;outline:none;background:var(--pve-panel);color:var(--pve-text);font-family:inherit;transition:border-color .15s;width:clamp(120px,16vw,180px)}
+.toolbar input:focus{border-color:var(--pve-blue)}.toolbar input::placeholder{color:var(--pve-muted)}
+.toolbar button,.toolbar select{padding:3px 8px;border:1px solid var(--pve-border);border-radius:4px;background:var(--pve-panel);color:var(--pve-muted);cursor:pointer;font-size:10px;font-family:inherit}
+.toolbar button:hover{background:var(--pve-panel-alt);border-color:var(--pve-blue);color:var(--pve-text)}
+.toolbar .nav-btn{min-width:26px;text-align:center}.toolbar .page-info{font-size:10px;color:var(--pve-muted);margin:0 2px}
+.table-wrap{background:var(--pve-panel);border:1px solid var(--pve-border);border-radius:var(--radius);overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:clamp(10px,0.75vw,12px)}
+th{background:var(--pve-panel-hdr);padding:5px 8px;text-align:left;font-weight:600;border-bottom:1px solid var(--pve-border);cursor:pointer;user-select:none;white-space:nowrap;color:var(--pve-muted);font-size:clamp(9px,0.65vw,10px);text-transform:uppercase;letter-spacing:0.3px}
+th:hover{color:var(--pve-text)}th .sort-arrow{font-size:7px;margin-left:2px;color:var(--pve-orange)}
+td{padding:4px 8px;border-bottom:1px solid var(--pve-border-light);color:var(--pve-text)}
+tr:hover td{background:rgba(59,130,246,0.05)}.win,.win td{color:var(--pve-green)!important}.loss,.loss td{color:var(--pve-red)!important}.win td{background:rgba(34,197,94,0.06)}.loss td{background:rgba(239,68,68,0.06)}
+tr.highlight td{outline:2px solid var(--pve-orange);outline-offset:-1px;background:rgba(221,123,20,0.08)!important}
+
+/* ── Footer / Guide ── */
+.pve-footer{border-top:1px solid var(--pve-border);padding:4px 12px;font-size:10px;color:var(--pve-muted);display:flex;align-items:center;gap:12px;flex-shrink:0;background:var(--pve-panel-hdr);height:24px}
+.pve-footer .f-dot{width:4px;height:4px;border-radius:50%;background:var(--pve-green);display:inline-block;margin-right:4px}
+
+/* ── Guide details ── */
+.pve-details{background:var(--pve-panel);border:1px solid var(--pve-border);border-radius:var(--radius);padding:0;cursor:pointer;margin-top:6px}
+.pve-details summary{padding:8px 12px;font-size:11px;font-weight:600;color:var(--pve-text);outline:none;display:flex;align-items:center;gap:6px}
+.pve-details summary::-webkit-details-marker{color:var(--pve-muted)}
+.pve-details .pve-detail-body{padding:8px 12px 12px;font-size:11px;color:var(--pve-muted);line-height:1.8;border-top:1px solid var(--pve-border-light)}
+.pve-details .pve-detail-body b{color:var(--pve-text)}
+
+/* ── Proxmox status bar (inside panels) ── */
+.pve-status-bar{display:flex;gap:16px;padding:6px 12px;background:var(--pve-panel-hdr);border-top:1px solid var(--pve-border);font-size:10px;color:var(--pve-muted)}
+.pve-status-bar .item{display:flex;align-items:center;gap:4px}
+
+/* ── Responsive ── */
+@media(max-width:768px){.pve-sidebar{width:44px}.pve-sidebar .pve-sect-hdr,.pve-sidebar li span:not(.s-icon){display:none}.pve-sidebar li{justify-content:center;padding:7px 0}.summary-row{grid-template-columns:1fr 1fr}.chart-grid{grid-template-columns:1fr}.kpi-row{grid-template-columns:repeat(3,1fr)}}
+@media print{@page{margin:10mm}.pve-hdr,.pve-sidebar,.date-bar,.toolbar,.pve-btn,.pve-footer,.pve-details{display:none!important}.pve-body{display:block}.pve-content{overflow:visible;padding:0}.chart-box{break-inside:avoid}.table-wrap{overflow-x:visible}body{font-size:10pt;background:#fff!important;color:#000!important}.pve-panel{border:1px solid #ccc!important;background:#fff!important}.pve-panel-hdr{background:#f5f5f5!important}.kpi{border:1px solid #ccc!important}.section-title{color:#000!important}.section-title::before{background:#999!important}}
 </style></head><body>
-<div class="header"><h1>MT Desk v6.3.1 — {ACCOUNT}</h1>
-<div style="display:flex;align-items:center;gap:12px">
-  <div class="meta"><span id="headerCount">{COUNT}</span> 筆交易 · P/L: <b id="headerPL" style="color:{PL_COLOR}">{PL}</b> · 獲利佔比: <b id="headerWR">{WR}</b></div>
-  <button class="theme-btn" onclick="toggleTheme()" id="themeBtn">🌓</button>
-  <button class="theme-btn" onclick="window.print()" title="列印報告">🖨️</button>
-</div></div>
-<div class="date-bar">
-  <span class="lbl">📅 快速:</span>
-  <button class="quick-btn" onclick="quickFilter('today')">今日</button>
-  <button class="quick-btn" onclick="quickFilter('week')">本週</button>
-  <button class="quick-btn" onclick="quickFilter('month')">本月</button>
-  <button class="quick-btn" onclick="quickFilter('3m')">近三月</button>
-  <button class="quick-btn" onclick="quickFilter('all')">全部</button>
-  <span class="lbl" style="margin-left:12px">自訂:</span>
-  <input type="date" id="dateFrom" value="{DATE_MIN}" onchange="applyDateFilter()">
-  <span class="lbl">至</span>
-  <input type="date" id="dateTo" value="{DATE_MAX}" onchange="applyDateFilter()">
-  <button onclick="resetDateFilter()">重置</button>
-  <span class="lbl" id="filterInfo"></span>
+<!-- ══════ PVE Header ══════ -->
+<div class="pve-hdr">
+  <div class="pve-hdr-logo">
+    <span class="icon">◈</span>
+    <span class="name">MT Desk</span>
+    <span class="ver">v6.3.1</span>
+  </div>
+  <div class="pve-hdr-bread">
+    <span>Datacenter</span><span class="sep">›</span>
+    <span>{ACCOUNT}</span><span class="sep">›</span>
+    <span class="cur">Dashboard</span>
+  </div>
+  <div class="pve-hdr-right">
+  <span class="hdr-stat"><span class="dot on" id="statusDot"></span><span id="headerCount">{COUNT}</span> trades</span>
+  <span class="hdr-stat">P/L: <b id="headerPL" style="color:{PL_COLOR}">{PL}</b></span>
+  <span class="hdr-stat">WR: <b id="headerWR">{WR}</b></span>
+  <button class="pve-btn" onclick="window.print()" title="列印報告">🖨️</button>
+  </div>
 </div>
-<div class="main"><div id="summaryLine" class="summary-line"></div><div class="kpi-row" id="kpiRow">{CARDS}</div>
+<!-- ══════ PVE Body ══════ -->
+<div class="pve-body">
+  <!-- Sidebar Navigation -->
+  <div class="pve-sidebar" id="pveSidebar">
+    <div class="pve-sect-hdr">Navigation</div>
+    <ul class="pve-sect">
+      <li class="active" data-target="overview"><span class="s-icon">📊</span> <span>Overview</span></li>
+      <li data-target="charts"><span class="s-icon">📈</span> <span>Charts</span></li>
+      <li data-target="trades"><span class="s-icon">📋</span> <span>Trade Log</span> <span class="s-badge" id="tradeBadge">{COUNT}</span></li>
+      <li data-target="guide"><span class="s-icon">📖</span> <span>Guide</span></li>
+    </ul>
+  </div>
+  <!-- Main Content -->
+  <div class="pve-content" id="pveContent">
+    <div class="date-bar">
+      <span class="lbl">📅 Quick:</span>
+      <button class="quick-btn" onclick="quickFilter('today')">Today</button>
+      <button class="quick-btn" onclick="quickFilter('week')">Week</button>
+      <button class="quick-btn" onclick="quickFilter('month')">Month</button>
+      <button class="quick-btn" onclick="quickFilter('3m')">3M</button>
+      <button class="quick-btn" onclick="quickFilter('all')">All</button>
+      <span class="lbl" style="margin-left:8px">Custom:</span>
+      <input type="date" id="dateFrom" value="{DATE_MIN}" onchange="applyDateFilter()">
+      <span class="lbl">→</span>
+      <input type="date" id="dateTo" value="{DATE_MAX}" onchange="applyDateFilter()">
+      <button class="quick-btn" onclick="resetDateFilter()">Reset</button>
+      <span class="lbl" id="filterInfo"></span>
+    </div>
+    <div id="summaryLine" class="summary-line"></div>
+    <div class="kpi-row" id="kpiRow">{CARDS}</div>
 {SUMMARY}
 <!-- ══════ v6.1: Long-Term Trading Habit Analysis ══════ -->
+<div id="chartsSection">
 <div class="section-title">📊 交易習慣分析</div>
 <div class="chart-grid">
   <div class="chart-box">
@@ -285,7 +388,7 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 </div>
 <!-- ══════ v6.2: CSV-Enhanced Charts (R-Multiple, Asset Class) ══════ -->
 <div id="csvSection" style="display:none">
-<div class="section-title">📈 R-Multiple 分佈與資產類別 <span style="font-size:11px;color:var(--muted);font-weight:400">（僅 CSV 匯入）</span></div>
+<div class="section-title">📈 R-Multiple 分佈與資產類別 <span style="font-size:11px;color:var(--pve-muted);font-weight:400">（僅 CSV 匯入）</span></div>
 <div class="chart-grid">
   <div class="chart-box" id="chart-r-box">
     <span class="chart-tag x">X：R-Multiple 區間</span><span class="chart-tag y">Y：筆數</span>
@@ -296,11 +399,13 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
     <div id="chart-ac" style="width:100%;height:300px"></div>
   </div>
 </div>
-</div>
+</div></div>
+</div><!-- /chartsSection -->
 <!-- ══════ Trade Table ══════ -->
+<div id="tradeSection">
 <div class="section-title">逐筆明細</div>
 <div class="toolbar"><input type="text" id="searchBox" placeholder="搜尋 Ticket / 品種 / 日期..." oninput="doSearch()">
-<span id="searchInfo" style="font-size:clamp(10px,0.8vw,13px);color:var(--muted)"></span><span style="flex:1"></span>
+<span id="searchInfo" style="font-size:clamp(10px,0.8vw,13px);color:var(--pve-muted)"></span><span style="flex:1"></span>
 <span class="page-info">每頁</span><select id="pageSize" onchange="pageSize=+this.value;currentPage=1;renderTable()">
 <option value="15" selected>15</option><option value="30">30</option><option value="50">50</option><option value="100">100</option></select><span class="page-info">筆</span>
 <button class="nav-btn" onclick="currentPage=1;renderTable()">«</button><button class="nav-btn" onclick="if(currentPage>1){currentPage--;renderTable()}">‹</button>
@@ -327,6 +432,7 @@ tr.highlight td{outline:2px solid #ff9100;outline-offset:-1px}
 <button class="nav-btn" onclick="currentPage=1;renderTable()">«</button><button class="nav-btn" onclick="if(currentPage>1){currentPage--;renderTable()}">‹</button>
 <button class="nav-btn" onclick="if(currentPage<totalPages){currentPage++;renderTable()}">›</button>
 <button class="nav-btn" onclick="currentPage=totalPages;renderTable()">»</button></div></div>
+</div><!-- /tradeSection -->
 <script src="{ECHART_CDN}"></script>
 <script>
 var ALL_TRADES={TRADE_JSON};
@@ -346,9 +452,58 @@ var CHART_R={R_CHART_JSON};
 var CHART_AC={AC_JSON};
 var CHART_SC={SC_JSON};
 
-(function(){var s=localStorage.getItem('mt-theme');var m=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',s||m);})();
-window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',function(e){if(!localStorage.getItem('mt-theme')){document.documentElement.setAttribute('data-theme',e.matches?'dark':'light');initAllCharts();}});
-function toggleTheme(){var c=document.documentElement.getAttribute('data-theme');var n=c==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);localStorage.setItem('mt-theme',n);initAllCharts();}
+// ══════ PVE: Always dark theme ══════
+document.documentElement.setAttribute('data-theme','dark');
+
+// ══════ PVE: Sidebar Navigation ══════
+(function(){
+  var sidebar=document.getElementById('pveSidebar');
+  var content=document.getElementById('pveContent');
+  if(!sidebar||!content)return;
+  var items=sidebar.querySelectorAll('.pve-sect li');
+  var sections={overview:document.getElementById('kpiRow'),charts:document.getElementById('chartsSection'),trades:document.getElementById('tradeSection'),guide:document.getElementById('guideSection')};
+  function getSectionTop(id){
+    var el=sections[id];
+    if(!el)return 0;
+    var rect=el.getBoundingClientRect();
+    return rect.top+content.scrollTop-16;
+  }
+  function updateActive(){
+    var scrollPos=content.scrollTop+60;
+    var activeId='overview';
+    for(var key in sections){
+      var el=sections[key];
+      if(!el)continue;
+      var top=getSectionTop(key);
+      if(scrollPos>=top)activeId=key;
+    }
+    items.forEach(function(li){
+      var target=li.getAttribute('data-target');
+      li.classList.toggle('active',target===activeId);
+    });
+  }
+  items.forEach(function(li){
+    li.addEventListener('click',function(){
+      var target=this.getAttribute('data-target');
+      var el=sections[target];
+      if(el){
+        content.scrollTo({top:getSectionTop(target),behavior:'smooth'});
+        items.forEach(function(i){i.classList.remove('active');});
+        this.classList.add('active');
+      }
+    });
+  });
+  content.addEventListener('scroll',updateActive);
+  // Update trade badge on filter
+  var origRender=renderTable;
+  var _origRenderTable=renderTable;
+  // Track trade count updates
+  var badgeInterval=setInterval(function(){
+    var badge=document.getElementById('tradeBadge');
+    var cnt=document.getElementById('headerCount');
+    if(badge&&cnt)badge.textContent=cnt.textContent;
+  },500);
+})();
 
 function ecOpt(o,isDark){
   if(isDark)echarts.registerTheme('mt-dark',{});
@@ -655,21 +810,27 @@ function renderTable(){totalPages=Math.ceil(data.length/pageSize)||1;if(currentP
   h+='<tr '+z+'><td>'+t.ticket+'</td><td>'+t.open+'</td>'+'<td>'+badge+'</td>'+'<td class="num">'+vol+'</td>'+'<td>'+t.symbol+'</td>'+op+sl+tp+'<td>'+t.close+'</td>'+cp+'<td class="num">$'+(t.commission||0).toFixed(2)+'</td><td class="num">$'+(t.swap||0).toFixed(2)+'</td><td class="num '+pCls+'">$'+t.profit.toFixed(2)+'</td></tr>';
 });document.getElementById('tradeBody').innerHTML=h;var info=currentPage+'/'+totalPages+' ('+data.length+'筆)';document.getElementById('pageInfo').textContent=info;document.getElementById('pageInfo2').textContent=info;}
 renderTable();document.getElementById('sa-profit').textContent='▼';updateSummaryLine(ALL_TRADES.length,ALL_TRADES.filter(function(t){return t.profit>0;}).length,ALL_TRADES.reduce(function(a,t){return a+t.profit;},0));</script>
-<div class="metric-guide" style="max-width:1440px;margin:20px auto 0;padding:0 clamp(10px,1vw,20px) 20px">
-<details style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;cursor:pointer">
-<summary style="font-size:13px;font-weight:600;color:var(--text);outline:none">📖 指標說明與計算公式</summary>
-<div style="margin-top:10px;font-size:12px;color:var(--muted);line-height:1.8">
+<details class="pve-details" id="guideSection">
+<summary>📖 指標說明與計算公式</summary>
+<div class="pve-detail-body">
 <p><b>總交易</b>：報表中所有已平倉交易的總筆數。</p>
 <p><b>總盈虧</b>：所有交易 profit 欄位的代數和（盈利 − 虧損 − 佣金 − Swap）。</p>
 <p><b>獲利佔比</b>：盈利筆數 ÷ 總筆數 × 100%。高獲利佔比不等於賺錢 — 如果平均虧損遠大於平均盈利，仍然會虧損。</p>
 <p><b>平均盈利</b>：所有盈利交易 profit 的平均值。這個值小 + 平均虧損大 = 高獲利佔比但虧錢。</p>
 <p><b>平均虧損</b>：所有虧損交易 profit 絕對值的平均值。</p>
-<p><b>盈虧比</b>：平均盈利 ÷ 平均虧損。<b style="color:var(--green)">≥1</b> 表示盈利時賺的比虧損時賠的多；<b style="color:var(--red)">&lt;1</b> 表示虧損時賠的比盈利時賺的多。這是判斷策略品質的核心指標。</p>
-<p><b>盈利因子</b>：總盈利 ÷ 總虧損絕對值。<b style="color:var(--red)">&lt;1</b> 是虧損策略。</p>
-<p><b>最大回撤</b>：權益曲線從歷史最高點到之後最低點的跌幅（美元）。衡量最壞情況下虧了多少。公式：max(0, max(peak − equity))。</p>
-<p><b>夏普比率</b>：風險調整後報酬 = 日均盈虧均值 ÷ 日均盈虧標準差 × √252。<b style="color:var(--red)">&lt;0</b> 表示平均每日回報為負。</p>
+<p><b>盈虧比</b>：平均盈利 ÷ 平均虧損。<b style="color:var(--pve-green)">≥1</b> 表示盈利時賺的比虧損時賠的多；<b style="color:var(--pve-red)">&lt;1</b> 表示虧損時賠的比盈利時賺的多。這是判斷策略品質的核心指標。</p>
+<p><b>盈利因子</b>：總盈利 ÷ 總虧損絕對值。<b style="color:var(--pve-red)">&lt;1</b> 是虧損策略。</p>
+<p><b>最大回撤</b>：權益曲線從歷史最高點到之後最低點的跌幅（美元）。公式：max(0, max(peak − equity))。</p>
+<p><b>夏普比率</b>：風險調整後報酬 = 日均盈虧均值 ÷ 日均盈虧標準差 × √252。<b style="color:var(--pve-red)">&lt;0</b> 表示平均每日回報為負。</p>
 <p><b>最佳／最差</b>：單筆交易的最大盈利與最大虧損金額。</p>
-</div></details></div>
+</div></details>
+</div><!-- /pve-content -->
+</div><!-- /pve-body -->
+<div class="pve-footer">
+  <span><span class="f-dot"></span> MT Desk v6.3.1</span>
+  <span style="flex:1"></span>
+  <span id="footerInfo">Ready · {COUNT} trades loaded</span>
+</div>
 </body></html>"""
 
 def process_file(path):
