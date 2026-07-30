@@ -266,17 +266,18 @@ def build_dashboard_html(account, trades, stats, cash_flows=None):
     sym_bubble_json = _j(sym_bubble)
 
     # All trades as JSON (with derived fields)
-    # Filter out only rows that are truly open/pending: missing close_time or identical to open_time.
-    # close_price may legitimately be 0 for stop-out / malformed rows; keep those trades.
+    # Filter out only rows that are truly open/pending: missing close_time.
+    # MT5 Account Statement reports have a single Time column (close_time only).
+    # In that case open_time equals close_time, which is valid for closed deals.
     all_trades = []
     skipped_open = 0
     for t in trades:
-        # Skip open/pending: no close_time or close_time equals open_time
-        if not t.get("close_time") or t["close_time"] == t.get("open_time"):
+        # Skip open/pending: no close_time
+        if not t.get("close_time"):
             skipped_open += 1
             continue
         dur_h = None
-        if t["open_time"] and t["close_time"]:
+        if t["open_time"] and t["close_time"] and t["close_time"] != t["open_time"]:
             dur_h = round((t["close_time"] - t["open_time"]).total_seconds() / 3600, 2)
         vol = t.get("volume", 0) or 0
         profit_per_lot = round(t["profit"] / vol, 2) if vol else 0

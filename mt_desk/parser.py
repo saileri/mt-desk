@@ -321,8 +321,47 @@ def _parse_mt5(html: str) -> tuple[list[dict], list[dict]]:
 def _build_col_map(cells: list[str]) -> dict:
     """Build column index map from header row."""
     mapping = {}
+    # First pass: identify the price columns present in this report.
+    # We need to distinguish between several MT4/MT5 views:
+    # 1. MT4 Standard: 'Open Price' / 'Price' and 'Close Price' / 'Price'.
+    # 2. MT5 Order History: 'Open Price' and 'Close Price' (or 'Price' twice).
+    # 3. MT5 Account Statement: 'Price' (actual trade price) + 'Market Price' (current market price, ignore).
+    # 4. MT5 Deal view: single 'Price' column.
+    normalized = [c.lower().replace(" ", "").replace(".", "").replace("/", "").replace("_", "") for c in cells]
+    market_price_idx = next((
+        i for i, cl in enumerate(normalized)
+        if any(kw in cl for kw in ["marketprice", "currentprice", "市场价位", "市場價位", "市價"])
+    ), None)
+    price_indices = [i for i, cl in enumerate(normalized) if any(kw in cl for kw in ["price", "价格", "價格"])]
+    open_price_idx = next((
+        i for i, cl in enumerate(normalized)
+        if any(kw in cl for kw in ["openprice", "开仓价", "開倉價"]) and "time" not in cl and "时间" not in cl and "時間" not in cl
+    ), None)
+    close_price_idx = next((
+        i for i, cl in enumerate(normalized)
+        if any(kw in cl for kw in ["closeprice", "平仓价", "平倉價"]) and "time" not in cl and "时间" not in cl and "時間" not in cl
+    ), None)
+
+    # Decide how to map price columns.
+    if market_price_idx is not None and price_indices:
+        # MT5 Account Statement: 'Price' is the actual trade price,
+        # 'Market Price' is the report-time market price and should be ignored.
+        mapping["open_price"] = price_indices[0]
+        mapping["close_price"] = price_indices[0]
+    elif open_price_idx is not None and close_price_idx is not None:
+        mapping["open_price"] = open_price_idx
+        mapping["close_price"] = close_price_idx
+    elif len(price_indices) >= 2:
+        # Two generic price columns: first = open, second = close.
+        mapping["open_price"] = price_indices[0]
+        mapping["close_price"] = price_indices[1]
+    elif price_indices:
+        # Single price column: use it for both open and close.
+        mapping["open_price"] = price_indices[0]
+        mapping["close_price"] = price_indices[0]
+
     for i, c in enumerate(cells):
-        cl = c.lower().replace(" ", "").replace(".", "").replace("/", "").replace("_", "")
+        cl = normalized[i]
         if any(kw in cl for kw in ["ticket", "position", "持仓", "持倉", "order", "订单", "訂單"]):
             mapping["ticket"] = i
         if any(kw in cl for kw in ["time", "时间", "時間"]):
@@ -338,15 +377,6 @@ def _build_col_map(cells: list[str]) -> dict:
             mapping["volume"] = i
         if any(kw in cl for kw in ["symbol", "item", "品种", "品種"]):
             mapping["symbol"] = i
-        # Price columns: first generic Price -> open_price, second -> close_price.
-        # Handles MT4 (Open Price / Price, Close Price / Price) and MT5 variants.
-        if any(kw in cl for kw in ["price", "价格", "價格"]):
-            if "open" in cl or "open_price" not in mapping:
-                mapping["open_price"] = i
-            elif "close" in cl or "close_price" not in mapping:
-                mapping["close_price"] = i
-        if any(kw in cl for kw in ["current", "market", "市场价", "市場價", "市價", "平仓价", "平倉價"]):
-            mapping["close_price"] = i
         if any(kw in cl for kw in ["sl", "stop", "止损", "止損"]):
             mapping["sl"] = i
         if any(kw in cl for kw in ["tp", "takeprofit"]):
@@ -357,7 +387,7 @@ def _build_col_map(cells: list[str]) -> dict:
             mapping["profit"] = i
         if any(kw in cl for kw in ["commission", "佣金"]):
             mapping["commission"] = i
-        if any(kw in cl for kw in ["comment", "注释", "註釋"]):
+        if any(kw in cl for kw in ["comment", "注释", "註释"]):
             mapping["comment"] = i
         if any(kw in cl for kw in ["login", "登录", "登錄"]):
             mapping["login"] = i
@@ -394,8 +424,8 @@ def _parse_with_map(cells: list[str], cmap: dict) -> dict | None:
         "close_time": ct or ot,
         "type": rt,
         "volume": clean_number(get_val("volume")),
-        "symbol": get_val("symbol").strip().lower(),
-        "open_price": clean_number(get_val("open_price")),
+        "symbol": get_val("symbol").strip().lower().rstrip("."),
+        "open_price": clean_number(get_val("open_price")) if cmap.get("open_price") is not None else clean_number(get_val("close_price")),
         "close_price": clean_number(get_val("close_price")),
         "sl": clean_number(get_val("sl")),
         "tp": clean_number(get_val("tp")),
