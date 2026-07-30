@@ -3,5 +3,5 @@
 from .parser import parse_statement
 from .analysis import analyze
 
-__version__ = "1.0.0"
+__version__ = "9.0.0"
 __all__ = ["parse_statement", "analyze"]

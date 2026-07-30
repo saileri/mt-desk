@@ -338,9 +338,14 @@ def _build_col_map(cells: list[str]) -> dict:
             mapping["volume"] = i
         if any(kw in cl for kw in ["symbol", "item", "品种", "品種"]):
             mapping["symbol"] = i
-        if any(kw in cl for kw in ["price", "价格", "價格"]) and "current" not in cl and "close" not in cl:
-            mapping["open_price"] = i
-        if any(kw in cl for kw in ["current", "market", "市场价", "市場價", "市價"]):
+        # Price columns: first generic Price -> open_price, second -> close_price.
+        # Handles MT4 (Open Price / Price, Close Price / Price) and MT5 variants.
+        if any(kw in cl for kw in ["price", "价格", "價格"]):
+            if "open" in cl or "open_price" not in mapping:
+                mapping["open_price"] = i
+            elif "close" in cl or "close_price" not in mapping:
+                mapping["close_price"] = i
+        if any(kw in cl for kw in ["current", "market", "市场价", "市場價", "市價", "平仓价", "平倉價"]):
             mapping["close_price"] = i
         if any(kw in cl for kw in ["sl", "stop", "止损", "止損"]):
             mapping["sl"] = i

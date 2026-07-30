@@ -266,13 +266,13 @@ def build_dashboard_html(account, trades, stats, cash_flows=None):
     sym_bubble_json = _j(sym_bubble)
 
     # All trades as JSON (with derived fields)
-    # Filter out open/pending trades (close_time == open_time or close_price == 0)
+    # Filter out only rows that are truly open/pending: missing close_time or identical to open_time.
+    # close_price may legitimately be 0 for stop-out / malformed rows; keep those trades.
     all_trades = []
     skipped_open = 0
     for t in trades:
-        # Skip open/pending: no close_time or close_time equals open_time or close_price is 0
-        if (not t.get("close_time") or t["close_time"] == t.get("open_time")
-                or not t.get("close_price")):
+        # Skip open/pending: no close_time or close_time equals open_time
+        if not t.get("close_time") or t["close_time"] == t.get("open_time"):
             skipped_open += 1
             continue
         dur_h = None
@@ -1221,7 +1221,7 @@ function updateKPIs(){
   var vals=[total,'$'+(pl>=0?'+':'')+pl.toFixed(2),(total?(wins/total*100).toFixed(0):0)+'%',
     '+$'+avgW.toFixed(2),'-$'+avgL.toFixed(2),plr.toFixed(2),pf.toFixed(2),
     '$'+maxdd.toFixed(2),(sharpe||0).toFixed(2),'$'+(best!==-Infinity?'+':'')+best.toFixed(2),'$-'+Math.abs(worst).toFixed(2)];
-  var kpiVals=document.querySelectorAll('.kpi-core .val');
+  var kpiVals=document.querySelectorAll('.kpi .val');
   for(var i=0;i<Math.min(vals.length,kpiVals.length);i++){kpiVals[i].textContent=vals[i];}
   updateSummaryLine(total,wins,pl);renderInsights();
 }

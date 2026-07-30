@@ -38,20 +38,17 @@ def analyze(trades: list[dict], parse_data: dict | None = None) -> dict[str, Any
 
     # Equity curve — daily aggregation to avoid duplicate dates on x-axis
     sorted_trades = sorted(trades, key=lambda x: x["open_time"] or datetime.min)
-    cum = 0.0
-    equity = []; equity_dates = []
-    last_date = None
+    daily_pl: dict[str, float] = defaultdict(float)
     for t in sorted_trades:
-        cum += t["profit"]
-        d = t["open_time"].strftime("%Y-%m-%d") if t["open_time"] else ""
-        if d != last_date and last_date is not None:
-            equity.append(round(cum - t["profit"], 2))
-            equity_dates.append(last_date)
-        last_date = d
-    # Append final point
-    if last_date is not None:
+        if t["open_time"]:
+            daily_pl[t["open_time"].strftime("%Y-%m-%d")] += t["profit"]
+
+    equity_dates = sorted(daily_pl.keys())
+    equity = []
+    cum = 0.0
+    for d in equity_dates:
+        cum += daily_pl[d]
         equity.append(round(cum, 2))
-        equity_dates.append(last_date)
 
     # Max drawdown with peak/trough points
     peak = 0.0
